@@ -751,6 +751,11 @@ Phần này mô tả thiết kế và *hợp đồng dữ liệu* cho các chứ
 - Executor thực thi firewall phải nằm trong **namespace thực sự xử lý traffic ICS**
   (container `NET_ADMIN` chèn luật vào chuỗi tác động lên bridge `br-ics`), và phải
   có hiệu lực **cả với kết nối đã tồn tại**, không chỉ kết nối mới.
+  > **Đã kiểm chứng cơ chế (A0):** container `--network host --cap-add NET_ADMIN`
+  > chạy `iptables -I DOCKER-USER -s <IP> -j DROP` chặn đúng IP nguồn trên bridge
+  > (attacker `.66` mất kết nối tới PLC, thiết bị `.50` và HMI `.20` vẫn hoạt động),
+  > ngắt cả kết nối đang mở, và gỡ được bằng `-D`. Rủi ro khả thi của chức năng
+  > chặn đã được loại bỏ; phần còn lại là quy trình duyệt + khôi phục + audit.
 - **Chặn nguồn tấn công KHÔNG đồng nghĩa khôi phục trạng thái PLC**: sau khi cô
   lập, vẫn phải phục hồi trạng thái vật lý (bật lại auto, mở van, đặt lại setpoint)
   qua kênh được phép, rồi **xác minh** mức nước trở lại vùng an toàn.
