@@ -21,6 +21,7 @@ from typing import Literal, Optional
 
 import asyncpg
 from fastapi import Body, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from detection import Detector
@@ -320,6 +321,15 @@ async def list_alerts(limit: int = 100):
     return [dict(r) for r in rows]
 
 
+@app.post("/api/alerts/{alert_id}/status")
+async def set_alert_status(alert_id: int, status: str = Body(..., embed=True)):
+    """Operator xác nhận/giải quyết một cảnh báo: new -> acknowledged -> resolved."""
+    if status not in ("new", "acknowledged", "resolved"):
+        raise HTTPException(status_code=400, detail="status không hợp lệ")
+    await app.state.pool.execute("UPDATE alerts SET status=$1 WHERE id=$2", status, alert_id)
+    return {"id": alert_id, "status": status}
+
+
 @app.get("/api/baseline")
 async def get_baseline():
     return detector.export()
@@ -379,6 +389,12 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         clients.discard(ws)
+
+
+# Phục vụ dashboard tĩnh (cùng origin với API). Mount SAU các route API nên
+# /api/* và /ws vẫn được ưu tiên; mọi đường còn lại trả file trong thư mục web/.
+if os.path.isdir("web"):
+    app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
 
 if __name__ == "__main__":

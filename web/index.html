@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ICS Monitor — Dashboard</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#131c2e; --panel2:#0f1829; --line:#233049;
+    --fg:#e6edf7; --muted:#8aa0c0; --accent:#38bdf8;
+    --crit:#ef4444; --high:#f97316; --med:#eab308; --low:#3b82f6; --ok:#22c55e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--fg);font-size:14px}
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;letter-spacing:.3px}
+  header .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  header .dot.off{background:var(--crit);box-shadow:0 0 8px var(--crit)}
+  nav{display:flex;gap:4px;padding:10px 16px;background:var(--panel2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{background:transparent;border:1px solid transparent;color:var(--muted);
+             padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px}
+  nav button.active{background:var(--panel);color:var(--fg);border-color:var(--line)}
+  nav .badge{background:var(--crit);color:#fff;border-radius:10px;padding:0 7px;margin-left:6px;font-size:12px}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .tile .n{font-size:28px;font-weight:700}
+  .tile .l{color:var(--muted);font-size:12px;margin-top:4px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px}
+  .panel h2{font-size:14px;margin:0 0 12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--muted);font-weight:600}
+  tr:hover td{background:var(--panel2)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .role-plc{background:rgba(56,189,248,.15);color:var(--accent)}
+  .role-hmi{background:rgba(34,197,94,.15);color:var(--ok)}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+  button.act{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+             padding:4px 10px;border-radius:7px;cursor:pointer;font-size:12px;margin-right:6px}
+  button.act:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#06283d;border:none;font-weight:700}
+  .sev-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .feed{max-height:65vh;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .feed .row{padding:4px 8px;border-bottom:1px solid var(--panel2);display:flex;gap:10px}
+  .dir-req{color:var(--accent)} .dir-resp{color:var(--muted)}
+  .muted{color:var(--muted)}
+  .ev{background:var(--panel2);border-radius:8px;padding:8px;margin-top:6px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js"></script>
+<script type="text/babel">
+const {useState, useEffect, useRef} = React;
+const SEV = {Critical:'var(--crit)', High:'var(--high)', Medium:'var(--med)', Low:'var(--low)'};
+const SEV_ORDER = {Critical:0, High:1, Medium:2, Low:3};
+
+const getJSON = (p) => fetch(p).then(r => r.json());
+const fmtTime = (ts) => ts ? new Date(ts*1000).toLocaleTimeString('vi-VN') : '—';
+const fmtVals = (e) => e.values!=null ? JSON.stringify(e.values)
+                     : e.value!=null ? String(e.value)
+                     : (e.address!=null ? `@${e.address}×${e.count??1}` : '');
+
+/* ---------- Tổng quan ---------- */
+function Overview({stats, alerts, onBaseline}){
+  const sevCount = {Critical:0,High:0,Medium:0,Low:0};
+  alerts.forEach(a => { if(sevCount[a.severity]!=null) sevCount[a.severity]++; });
+  const tiles = stats ? [
+    ['Sự kiện Modbus', stats.total_events], ['Gói TCP (SYN)', stats.tcp_events],
+    ['Lệnh ghi', stats.write_requests], ['Gói lỗi', stats.exceptions],
+    ['Thiết bị', stats.assets], ['Kết nối', stats.connections],
+    ['Cảnh báo', stats.alerts], ['Quarantine', stats.quarantined],
+  ] : [];
+  return (
+    <div>
+      <div className="grid">
+        {tiles.map(([l,n]) =>
+          <div className="tile" key={l}><div className="n">{n}</div><div className="l">{l}</div></div>)}
+      </div>
+      <div className="panel">
+        <h2>Baseline</h2>
+        <p>Trạng thái: {stats && stats.baseline_frozen
+          ? <span className="pill role-plc">ĐÃ CHỐT — đang phát hiện</span>
+          : <span className="pill role-hmi">ĐANG HỌC</span>}</p>
+        <button className="act primary" onClick={()=>onBaseline('freeze')}>Chốt baseline</button>
+        <button className="act" onClick={()=>onBaseline('reset')}>Học lại</button>
+        <p className="muted" style={{marginTop:10}}>Chốt sau khi mạng chạy sạch một lúc, rồi mới chạy kịch bản tấn công.</p>
+      </div>
+      <div className="panel">
+        <h2>Cảnh báo theo mức</h2>
+        {Object.keys(SEV).map(s =>
+          <span key={s} style={{marginRight:18}}>
+            <span className="sev-dot" style={{background:SEV[s]}}></span>{s}: <b>{sevCount[s]}</b>
+          </span>)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Thiết bị ---------- */
+function Assets(){
+  const [rows,setRows] = useState([]);
+  useEffect(()=>{ const t=()=>getJSON('/api/assets').then(setRows).catch(()=>{});
+                  t(); const id=setInterval(t,4000); return ()=>clearInterval(id); },[]);
+  return (
+    <div className="panel">
+      <h2>Thiết bị tự phát hiện ({rows.length})</h2>
+      <table><thead><tr><th>IP</th><th>Vai trò</th><th>MAC</th><th>Số sự kiện</th><th>Thấy đầu</th><th>Thấy cuối</th></tr></thead>
+      <tbody>{rows.map(r =>
+        <tr key={r.ip}>
+          <td className="mono">{r.ip}</td>
+          <td><span className={'pill '+(r.role==='plc'?'role-plc':'role-hmi')}>{r.role}</span>
+              <span className="muted"> ({r.role_source})</span></td>
+          <td className="mono muted">{r.mac||'—'}</td>
+          <td>{r.event_count}</td><td className="muted">{fmtTime(r.first_seen)}</td><td className="muted">{fmtTime(r.last_seen)}</td>
+        </tr>)}</tbody></table>
+    </div>
+  );
+}
+
+/* ---------- Topology (SVG) ---------- */
+function Topology({alerts}){
+  const [assets,setAssets] = useState([]);
+  const [conns,setConns] = useState([]);
+  useEffect(()=>{ const t=()=>{getJSON('/api/assets').then(setAssets).catch(()=>{});
+                                getJSON('/api/connections').then(setConns).catch(()=>{});};
+                  t(); const id=setInterval(t,4000); return ()=>clearInterval(id); },[]);
+  const attacked = new Set(alerts.map(a=>a.src_ip));
+  const W=900, H=Math.max(320, 90*Math.max(1,assets.filter(a=>a.role!=='plc').length));
+  const servers = assets.filter(a=>a.role==='plc');
+  const clients = assets.filter(a=>a.role!=='plc');
+  const pos = {};
+  servers.forEach((a,i)=> pos[a.ip]=[W-180, H/2 + (i-(servers.length-1)/2)*110]);
+  clients.forEach((a,i)=> pos[a.ip]=[180, 70 + i*90]);
+  const node = (a) => {
+    const [x,y]=pos[a.ip]; const atk=attacked.has(a.ip);
+    const fill = a.role==='plc' ? '#0ea5e9' : (atk ? '#ef4444' : '#22c55e');
+    return <g key={a.ip}>
+      <circle cx={x} cy={y} r="26" fill={fill} opacity="0.9"
+              stroke={atk?'#ef4444':'#fff2'} strokeWidth={atk?3:1}/>
+      <text x={x} y={y+4} textAnchor="middle" fontSize="11" fill="#06283d" fontWeight="700">
+        {a.role==='plc'?'PLC':(atk?'!':'HMI')}</text>
+      <text x={x} y={y+44} textAnchor="middle" fontSize="11" fill="#e6edf7">{a.ip}</text>
+    </g>;
+  };
+  return (
+    <div className="panel">
+      <h2>Sơ đồ kết nối mạng ICS</h2>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{background:'var(--panel2)',borderRadius:10}}>
+        {conns.filter(c=>pos[c.src_ip]&&pos[c.dst_ip]).map((c,i)=>{
+          const [x1,y1]=pos[c.src_ip],[x2,y2]=pos[c.dst_ip];
+          const atk=attacked.has(c.src_ip);
+          return <g key={i}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={atk?'#ef4444':'#38506f'} strokeWidth="2"
+                  strokeDasharray={atk?'6 4':''}/>
+            <text x={(x1+x2)/2} y={(y1+y2)/2-6} textAnchor="middle" fontSize="10" fill="#8aa0c0">
+              :{c.dst_port} ({c.request_count})</text>
+          </g>;})}
+        {assets.filter(a=>pos[a.ip]).map(node)}
+      </svg>
+      <p className="muted" style={{marginTop:10}}>
+        <span className="pill role-plc">PLC</span> máy chủ ·
+        <span className="pill role-hmi"> HMI/máy trạm</span> ·
+        <span style={{color:'var(--crit)'}}> ● đỏ = nguồn có cảnh báo</span></p>
+    </div>
+  );
+}
+
+/* ---------- Live Traffic ---------- */
+function Live({events}){
+  return (
+    <div className="panel">
+      <h2>Lưu lượng Modbus thời gian thực ({events.length})</h2>
+      <div className="feed">{events.map((e,i)=>
+        <div className="row" key={e.event_id||i}>
+          <span className="muted">{fmtTime(e.ts)}</span>
+          <span className={e.direction==='request'?'dir-req':'dir-resp'}>{e.direction==='request'?'▶':'◀'}</span>
+          <span className="mono">{e.src_ip}→{e.dst_ip}</span>
+          <span>{e.fc_name}</span>
+          <span className="muted">{fmtVals(e)}</span>
+          {e.is_write && <span style={{color:'var(--high)'}}>GHI</span>}
+          {e.is_exception && <span style={{color:'var(--crit)'}}>LỖI{e.exception_code}</span>}
+        </div>)}
+        {!events.length && <div className="muted" style={{padding:12}}>Đang chờ lưu lượng…</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Cảnh báo ---------- */
+function Alerts({alerts, setAlerts}){
+  const [open,setOpen] = useState({});
+  const setStatus = (id,status) =>
+    fetch(`/api/alerts/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status})})
+      .then(()=>setAlerts(prev=>prev.map(a=>a.id===id?{...a,status}:a)));
+  const sorted = [...alerts].sort((a,b)=>(SEV_ORDER[a.severity]-SEV_ORDER[b.severity]));
+  return (
+    <div className="panel">
+      <h2>Cảnh báo ({alerts.length})</h2>
+      <table><thead><tr><th>Mức</th><th>Luật</th><th>Nguồn → Đích</th><th>Mô tả</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>{sorted.map(a =>
+        <React.Fragment key={a.id}>
+        <tr>
+          <td><span className="sev-dot" style={{background:SEV[a.severity]}}></span>{a.severity}</td>
+          <td className="mono">{a.rule}</td>
+          <td className="mono">{a.src_ip} → {a.dst_ip}</td>
+          <td>{a.description}</td>
+          <td><span className="pill" style={{background:'var(--panel2)',color:a.status==='resolved'?'var(--ok)':a.status==='acknowledged'?'var(--med)':'var(--muted)'}}>{a.status||'new'}</span></td>
+          <td style={{whiteSpace:'nowrap'}}>
+            <button className="act" onClick={()=>setOpen(o=>({...o,[a.id]:!o[a.id]}))}>Bằng chứng</button>
+            <button className="act" onClick={()=>setStatus(a.id,'acknowledged')}>Ack</button>
+            <button className="act" onClick={()=>setStatus(a.id,'resolved')}>Resolve</button>
+          </td>
+        </tr>
+        {open[a.id] && <tr><td colSpan="6"><div className="ev">{JSON.stringify(a.evidence,null,2)}</div></td></tr>}
+        </React.Fragment>)}
+        {!alerts.length && <tr><td colSpan="6" className="muted">Chưa có cảnh báo.</td></tr>}
+      </tbody></table>
+    </div>
+  );
+}
+
+/* ---------- App ---------- */
+function App(){
+  const [tab,setTab] = useState('overview');
+  const [stats,setStats] = useState(null);
+  const [live,setLive] = useState([]);
+  const [alerts,setAlerts] = useState([]);
+  const [wsOk,setWsOk] = useState(false);
+
+  useEffect(()=>{ const t=()=>getJSON('/api/stats').then(setStats).catch(()=>{});
+                  t(); const id=setInterval(t,3000); return ()=>clearInterval(id); },[]);
+  useEffect(()=>{ getJSON('/api/alerts?limit=200').then(setAlerts).catch(()=>{}); },[]);
+  useEffect(()=>{
+    let ws, closed=false;
+    const connect=()=>{
+      ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+      ws.onopen=()=>setWsOk(true);
+      ws.onclose=()=>{setWsOk(false); if(!closed) setTimeout(connect,2000);};
+      ws.onmessage=(e)=>{ const m=JSON.parse(e.data);
+        if(m.type==='events') setLive(p=>[...m.data.filter(x=>x.kind!=='tcp').reverse(), ...p].slice(0,200));
+        else if(m.type==='alert') setAlerts(p=>[...m.data, ...p]); };
+    };
+    connect(); return ()=>{closed=true; if(ws)ws.close();};
+  },[]);
+
+  const onBaseline=(a)=> fetch('/api/baseline/'+a,{method:'POST'}).then(()=>getJSON('/api/stats').then(setStats));
+  const newAlerts = alerts.filter(a=>(a.status||'new')==='new').length;
+  const TABS=[['overview','Tổng quan'],['assets','Thiết bị'],['topology','Topology'],
+              ['live','Live Traffic'],['alerts','Cảnh báo']];
+  return (
+    <div>
+      <header>
+        <span className={'dot'+(wsOk?'':' off')}></span>
+        <h1>ICS/OT MONITOR — Modbus/TCP</h1>
+        <span className="muted" style={{marginLeft:'auto'}}>{wsOk?'real-time':'mất kết nối'}</span>
+      </header>
+      <nav>{TABS.map(([k,l])=>
+        <button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>
+          {l}{k==='alerts'&&newAlerts>0?<span className="badge">{newAlerts}</span>:null}
+        </button>)}</nav>
+      <main>
+        {tab==='overview' && <Overview stats={stats} alerts={alerts} onBaseline={onBaseline}/>}
+        {tab==='assets' && <Assets/>}
+        {tab==='topology' && <Topology alerts={alerts}/>}
+        {tab==='live' && <Live events={live}/>}
+        {tab==='alerts' && <Alerts alerts={alerts} setAlerts={setAlerts}/>}
+      </main>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

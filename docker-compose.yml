@@ -43,6 +43,8 @@ services:
       DB_DSN: postgresql://ics:ics@db:5432/ics
     ports:
       - "8000:8000"      # mở ra Mac host để dashboard/kiểm thử truy cập
+    volumes:
+      - ./web:/app/web:ro   # phục vụ dashboard tĩnh từ backend (cùng origin)
     depends_on:
       - db
     networks:

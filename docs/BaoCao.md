@@ -15,10 +15,10 @@
 > bản này, **các Giai đoạn 1–5 đã hoàn thành và kiểm thử**: mô hình ICS giả lập
 > và công cụ phân tích gói (GĐ1), sensor bắt và phân tích Modbus (GĐ2), backend
 > + cơ sở dữ liệu + WebSocket (GĐ3), phát hiện thiết bị và kết nối (GĐ4), học
-> baseline và phát hiện tấn công (GĐ5) — tức trọn các bước *Monitor*, *Discover*,
-> *Detect* và *Alert*. Các giai đoạn sau (GĐ6–9) được mô tả ở mức thiết kế/kế
-> hoạch và sẽ bổ sung chi tiết khi hoàn thành. Những mục chưa làm xong được đánh
-> dấu *(kế hoạch)*. Sau các giai đoạn trên, dự án đã trải qua một **đợt rà soát và
+> baseline và phát hiện tấn công (GĐ5), và **Dashboard giám sát (GĐ8)** — tức trọn
+> các bước *Monitor*, *Discover*, *Detect*, *Alert* và *Investigate*. Còn lại:
+> ứng phó có duyệt (GĐ7, cơ chế chặn đã kiểm chứng) và demo + đánh giá (GĐ9).
+> Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
 > củng cố** (mục 4.7): sửa các lỗi về ghép luồng TCP, giải mã, độ tin cậy
 > truyền/lưu event, kiểm tra đầu vào và logic PLC/HMI.
 
@@ -295,7 +295,7 @@ tảng giám sát** (sensor, backend, cơ sở dữ liệu, dashboard).
 | 5 | Baseline + luật phát hiện + script tấn công | **Hoàn thành** (6/6 luật, gồm quét cổng) |
 | 6 | Quản lý cảnh báo và sự cố | *(kế hoạch)* |
 | 7 | Hỗ trợ ứng phó có xác nhận | *(kế hoạch)* |
-| 8 | Dashboard | *(kế hoạch)* |
+| 8 | Dashboard | **Hoàn thành** (5 trang + Acknowledge/Resolve) |
 | 9 | Demo và đánh giá | *(kế hoạch)* |
 
 ---
@@ -772,10 +772,43 @@ Phần này mô tả thiết kế và *hợp đồng dữ liệu* cho các chứ
 - **Độ trễ phát hiện** = thời điểm sinh cảnh báo − thời điểm gói tấn công đầu tiên
   (dùng các mốc thời gian đã phân biệt: capture, nhận, lưu, cảnh báo).
 
-### 4.9. Các giai đoạn tiếp theo
+### 4.9. Giai đoạn 8: Dashboard giám sát
 
-*(Đang thực hiện — sẽ bổ sung nội dung chi tiết khi hoàn thành từng giai đoạn
-theo lộ trình ở mục 3.4.)*
+Dashboard trực quan hóa toàn bộ dữ liệu đã có, hiện thực bước **Investigate**.
+
+#### 4.9.1. Kiến trúc
+
+Dashboard là một trang tĩnh (`web/index.html`) **phục vụ ngay từ backend** qua
+`StaticFiles` (cùng origin với API nên không vướng CORS, không cần thêm service).
+Dùng **React qua CDN** (không cần bước build dễ vỡ), **topology vẽ bằng SVG**, cập
+nhật **thời gian thực qua WebSocket** kết hợp poll định kỳ các API.
+
+#### 4.9.2. Các trang
+
+| Trang | Nguồn dữ liệu | Nội dung |
+|---|---|---|
+| Tổng quan | `/api/stats`, `/api/baseline/*` | Thẻ số liệu, điều khiển chốt/học lại baseline, cảnh báo theo mức |
+| Thiết bị | `/api/assets` | Danh sách tài sản (IP, vai trò suy đoán, MAC, số sự kiện, thời điểm) |
+| Topology | `/api/assets` + `/api/connections` | Sơ đồ mạng; nguồn có cảnh báo tô **đỏ** |
+| Live Traffic | `WS /ws` | Lưu lượng Modbus giải mã chạy thời gian thực |
+| Cảnh báo | `/api/alerts` + `WS /ws` | Bảng cảnh báo theo mức, xem bằng chứng, nút **Acknowledge/Resolve** |
+
+Nút Acknowledge/Resolve gọi `POST /api/alerts/{id}/status` để đổi trạng thái cảnh
+báo (`new → acknowledged → resolved`).
+
+#### 4.9.3. Kết quả kiểm thử
+
+| Nội dung | Kết quả |
+|---|---|
+| Backend phục vụ dashboard tại `/` | Đạt — trả `index.html`, API `/api/*` và `/ws` không bị che |
+| JSX biên dịch | Đạt — không lỗi cú pháp |
+| Acknowledge/Resolve | Đạt — đổi và lưu đúng trạng thái cảnh báo |
+| Hiển thị real-time | Đạt — cảnh báo và lưu lượng cập nhật qua WebSocket; topology đánh dấu nguồn tấn công |
+
+### 4.10. Các giai đoạn tiếp theo
+
+*(Đang thực hiện — còn: hoàn thiện ứng phó có duyệt (chặn IP + khôi phục, cơ chế
+đã kiểm chứng ở mục 4.8), gom sự cố, và demo + đánh giá định lượng.)*
 
 ---
 
