@@ -94,6 +94,11 @@ CREATE TABLE IF NOT EXISTS quarantine (
     id BIGSERIAL PRIMARY KEY, received_at TIMESTAMPTZ DEFAULT now(),
     reason TEXT, payload JSONB
 );
+CREATE TABLE IF NOT EXISTS response_actions (
+    id BIGSERIAL PRIMARY KEY, alert_id BIGINT, src_ip TEXT, action TEXT,
+    params JSONB, status TEXT DEFAULT 'suggested', result TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+);
 """
 
 UPSERT_SERVER = """
@@ -318,7 +323,16 @@ async def list_alerts(limit: int = 100):
     rows = await app.state.pool.fetch(
         "SELECT id, ts, severity, rule, src_ip, dst_ip, description, evidence, status "
         "FROM alerts ORDER BY id DESC LIMIT $1", limit)
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        if isinstance(d.get("evidence"), str):   # JSONB về dạng chuỗi -> parse cho dashboard
+            try:
+                d["evidence"] = json.loads(d["evidence"])
+            except json.JSONDecodeError:
+                pass
+        out.append(d)
+    return out
 
 
 @app.post("/api/alerts/{alert_id}/status")
@@ -328,6 +342,64 @@ async def set_alert_status(alert_id: int, status: str = Body(..., embed=True)):
         raise HTTPException(status_code=400, detail="status không hợp lệ")
     await app.state.pool.execute("UPDATE alerts SET status=$1 WHERE id=$2", status, alert_id)
     return {"id": alert_id, "status": status}
+
+
+# --------------------------- Ứng phó (có duyệt) -----------------------------
+# Quy trình: đề xuất (suggested) -> operator duyệt (approved) -> executor thực
+# thi (executed) -> hoàn tác (undo_requested -> undone). Executor là service
+# riêng (responder) chạy iptables; backend chỉ quản lý quy trình + audit.
+@app.post("/api/responses")
+async def suggest_response(alert_id: int = Body(..., embed=True)):
+    """Sinh đề xuất biện pháp ứng phó cho một cảnh báo."""
+    a = await app.state.pool.fetchrow(
+        "SELECT severity, src_ip FROM alerts WHERE id=$1", alert_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="không có cảnh báo")
+    if a["severity"] in ("Critical", "High", "Medium"):
+        action, params = "block_ip", {"ip": a["src_ip"]}
+    else:
+        action, params = "monitor", {}
+    rid = await app.state.pool.fetchval(
+        "INSERT INTO response_actions (alert_id, src_ip, action, params) "
+        "VALUES ($1,$2,$3,$4) RETURNING id",
+        alert_id, a["src_ip"], action, json.dumps(params))
+    return {"id": rid, "alert_id": alert_id, "src_ip": a["src_ip"],
+            "action": action, "status": "suggested"}
+
+
+@app.post("/api/responses/{rid}/approve")
+async def approve_response(rid: int):
+    """Operator DUYỆT biện pháp -> executor sẽ thực thi."""
+    await app.state.pool.execute(
+        "UPDATE response_actions SET status='approved', updated_at=now() "
+        "WHERE id=$1 AND status='suggested'", rid)
+    return {"id": rid, "status": "approved"}
+
+
+@app.post("/api/responses/{rid}/undo")
+async def undo_response(rid: int):
+    """Yêu cầu hoàn tác -> executor sẽ gỡ luật chặn."""
+    await app.state.pool.execute(
+        "UPDATE response_actions SET status='undo_requested', updated_at=now() "
+        "WHERE id=$1 AND status='executed'", rid)
+    return {"id": rid, "status": "undo_requested"}
+
+
+@app.post("/api/responses/{rid}/result")
+async def response_result(rid: int, status: str = Body(...), result: str = Body(default="")):
+    """Executor báo lại kết quả thực thi (executed/undone/failed)."""
+    await app.state.pool.execute(
+        "UPDATE response_actions SET status=$1, result=$2, updated_at=now() WHERE id=$3",
+        status, result, rid)
+    return {"id": rid, "status": status}
+
+
+@app.get("/api/responses")
+async def list_responses(limit: int = 100):
+    rows = await app.state.pool.fetch(
+        "SELECT id, alert_id, src_ip, action, params, status, result, created_at, updated_at "
+        "FROM response_actions ORDER BY id DESC LIMIT $1", limit)
+    return [dict(r) for r in rows]
 
 
 @app.get("/api/baseline")

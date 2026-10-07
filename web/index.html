@@ -192,8 +192,38 @@ function Live({events}){
   );
 }
 
+/* ---------- Ứng phó ---------- */
+function Responses(){
+  const [rows,setRows] = useState([]);
+  const load = () => getJSON('/api/responses').then(setRows).catch(()=>{});
+  useEffect(()=>{ load(); const id=setInterval(load,2000); return ()=>clearInterval(id); },[]);
+  const act = (id,path) => fetch(`/api/responses/${id}/${path}`,{method:'POST'}).then(load);
+  const C = {executed:'var(--ok)',undone:'var(--muted)',approved:'var(--med)',
+             suggested:'var(--accent)',undo_requested:'var(--med)',failed:'var(--crit)'};
+  return (
+    <div className="panel">
+      <h2>Ứng phó &amp; audit ({rows.length})</h2>
+      <table><thead><tr><th>#</th><th>Biện pháp</th><th>Mục tiêu</th><th>Trạng thái</th><th>Kết quả</th><th></th></tr></thead>
+      <tbody>{rows.map(r =>
+        <tr key={r.id}>
+          <td className="muted">{r.id}</td><td className="mono">{r.action}</td>
+          <td className="mono">{r.src_ip}</td>
+          <td><span className="pill" style={{background:'var(--panel2)',color:C[r.status]||'var(--fg)'}}>{r.status}</span></td>
+          <td className="muted">{r.result||'—'}</td>
+          <td style={{whiteSpace:'nowrap'}}>
+            {r.status==='suggested' && <button className="act primary" onClick={()=>act(r.id,'approve')}>Duyệt &amp; thực thi</button>}
+            {r.status==='executed' && <button className="act" onClick={()=>act(r.id,'undo')}>Hoàn tác</button>}
+          </td>
+        </tr>)}
+        {!rows.length && <tr><td colSpan="6" className="muted">Chưa có hành động. Vào tab Cảnh báo → "Đề xuất chặn".</td></tr>}
+      </tbody></table>
+      <p className="muted" style={{marginTop:10}}>Chặn IP chỉ thực thi SAU khi operator bấm "Duyệt". Hoàn tác = gỡ luật chặn (không tự khôi phục trạng thái vật lý của PLC).</p>
+    </div>
+  );
+}
+
 /* ---------- Cảnh báo ---------- */
-function Alerts({alerts, setAlerts}){
+function Alerts({alerts, setAlerts, onSuggest}){
   const [open,setOpen] = useState({});
   const setStatus = (id,status) =>
     fetch(`/api/alerts/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -216,6 +246,7 @@ function Alerts({alerts, setAlerts}){
             <button className="act" onClick={()=>setOpen(o=>({...o,[a.id]:!o[a.id]}))}>Bằng chứng</button>
             <button className="act" onClick={()=>setStatus(a.id,'acknowledged')}>Ack</button>
             <button className="act" onClick={()=>setStatus(a.id,'resolved')}>Resolve</button>
+            <button className="act" onClick={()=>onSuggest(a.id)} title="Tạo đề xuất chặn IP nguồn">⛔ Đề xuất chặn</button>
           </td>
         </tr>
         {open[a.id] && <tr><td colSpan="6"><div className="ev">{JSON.stringify(a.evidence,null,2)}</div></td></tr>}
@@ -251,9 +282,11 @@ function App(){
   },[]);
 
   const onBaseline=(a)=> fetch('/api/baseline/'+a,{method:'POST'}).then(()=>getJSON('/api/stats').then(setStats));
+  const onSuggest=(alertId)=> fetch('/api/responses',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({alert_id:alertId})}).then(()=>setTab('responses'));
   const newAlerts = alerts.filter(a=>(a.status||'new')==='new').length;
   const TABS=[['overview','Tổng quan'],['assets','Thiết bị'],['topology','Topology'],
-              ['live','Live Traffic'],['alerts','Cảnh báo']];
+              ['live','Live Traffic'],['alerts','Cảnh báo'],['responses','Ứng phó']];
   return (
     <div>
       <header>
@@ -270,7 +303,8 @@ function App(){
         {tab==='assets' && <Assets/>}
         {tab==='topology' && <Topology alerts={alerts}/>}
         {tab==='live' && <Live events={live}/>}
-        {tab==='alerts' && <Alerts alerts={alerts} setAlerts={setAlerts}/>}
+        {tab==='alerts' && <Alerts alerts={alerts} setAlerts={setAlerts} onSuggest={onSuggest}/>}
+        {tab==='responses' && <Responses/>}
       </main>
     </div>
   );

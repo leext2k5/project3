@@ -70,3 +70,10 @@ CREATE TABLE IF NOT EXISTS quarantine (
     id          BIGSERIAL PRIMARY KEY, received_at TIMESTAMPTZ DEFAULT now(),
     reason      TEXT, payload JSONB
 );
+
+-- Giai đoạn 7: nhật ký ứng phó (đề xuất -> duyệt -> thực thi -> hoàn tác).
+CREATE TABLE IF NOT EXISTS response_actions (
+    id          BIGSERIAL PRIMARY KEY, alert_id BIGINT, src_ip TEXT, action TEXT,
+    params      JSONB, status TEXT DEFAULT 'suggested', result TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+);

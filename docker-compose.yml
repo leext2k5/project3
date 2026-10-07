@@ -50,6 +50,18 @@ services:
     networks:
       - mon_net
 
+  # Executor ứng phó: chạy mạng host + NET_ADMIN để thực thi iptables trên br-ics.
+  responder:
+    image: ics-lab
+    command: python responder.py
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      BACKEND_URL: http://127.0.0.1:8000
+    depends_on:
+      - backend
+
   db:
     image: postgres:16
     environment:

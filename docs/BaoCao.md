@@ -15,10 +15,10 @@
 > bản này, **các Giai đoạn 1–5 đã hoàn thành và kiểm thử**: mô hình ICS giả lập
 > và công cụ phân tích gói (GĐ1), sensor bắt và phân tích Modbus (GĐ2), backend
 > + cơ sở dữ liệu + WebSocket (GĐ3), phát hiện thiết bị và kết nối (GĐ4), học
-> baseline và phát hiện tấn công (GĐ5), và **Dashboard giám sát (GĐ8)** — tức trọn
-> các bước *Monitor*, *Discover*, *Detect*, *Alert* và *Investigate*. Còn lại:
-> ứng phó có duyệt (GĐ7, cơ chế chặn đã kiểm chứng) và demo + đánh giá (GĐ9).
-> Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
+> baseline và phát hiện tấn công (GĐ5), **ứng phó có duyệt (GĐ7)** và **Dashboard
+> giám sát (GĐ8)** — tức **trọn luồng Monitor → Discover → Detect → Alert →
+> Investigate → Respond**. Còn lại: gom sự cố (GĐ6) và demo + đánh giá định lượng
+> (GĐ9). Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
 > củng cố** (mục 4.7): sửa các lỗi về ghép luồng TCP, giải mã, độ tin cậy
 > truyền/lưu event, kiểm tra đầu vào và logic PLC/HMI.
 
@@ -294,8 +294,8 @@ tảng giám sát** (sensor, backend, cơ sở dữ liệu, dashboard).
 | 4 | Phát hiện thiết bị và kết nối | **Hoàn thành** |
 | 5 | Baseline + luật phát hiện + script tấn công | **Hoàn thành** (6/6 luật, gồm quét cổng) |
 | 6 | Quản lý cảnh báo và sự cố | *(kế hoạch)* |
-| 7 | Hỗ trợ ứng phó có xác nhận | *(kế hoạch)* |
-| 8 | Dashboard | **Hoàn thành** (5 trang + Acknowledge/Resolve) |
+| 7 | Hỗ trợ ứng phó có xác nhận | **Hoàn thành** (đề xuất + chặn IP có duyệt + hoàn tác) |
+| 8 | Dashboard | **Hoàn thành** (6 trang + Acknowledge/Resolve) |
 | 9 | Demo và đánh giá | *(kế hoạch)* |
 
 ---
@@ -739,10 +739,12 @@ quán của thiết kế. Các nhóm vấn đề đã xử lý và cách kiểm 
 - Xác thực nguồn sensor bằng token dùng chung (bật khi đặt `SENSOR_TOKEN`); chưa
   dùng chứng chỉ/mTLS.
 
-### 4.8. Thiết kế ứng phó và đánh giá (định hướng, chưa triển khai)
+### 4.8. Thiết kế ứng phó và đánh giá
 
-Phần này mô tả thiết kế và *hợp đồng dữ liệu* cho các chức năng chưa code (Giai
-đoạn 7 và 9), để báo cáo phản ánh đúng hiện trạng.
+> **Cập nhật:** phần **ứng phó** dưới đây nay **đã được triển khai** — xem mục
+> 4.10. Phần **đánh giá** (Giai đoạn 9) vẫn ở mức thiết kế.
+
+Phần này mô tả thiết kế và *hợp đồng dữ liệu* làm cơ sở cho việc hiện thực.
 
 **Quy trình ứng phó (Giai đoạn 7):** phát hiện → operator **duyệt** → cô lập nguồn
 → phục hồi trạng thái qua kênh vận hành được phép → xác minh → ghi **audit**. Các
@@ -805,10 +807,51 @@ báo (`new → acknowledged → resolved`).
 | Acknowledge/Resolve | Đạt — đổi và lưu đúng trạng thái cảnh báo |
 | Hiển thị real-time | Đạt — cảnh báo và lưu lượng cập nhật qua WebSocket; topology đánh dấu nguồn tấn công |
 
-### 4.10. Các giai đoạn tiếp theo
+### 4.10. Giai đoạn 7: Ứng phó có duyệt (Respond)
 
-*(Đang thực hiện — còn: hoàn thiện ứng phó có duyệt (chặn IP + khôi phục, cơ chế
-đã kiểm chứng ở mục 4.8), gom sự cố, và demo + đánh giá định lượng.)*
+#### 4.10.1. Kiến trúc
+
+Theo đúng thiết kế ở mục 4.8: một **executor riêng** (`lab/responder.py`) chạy
+`network_mode: host` + `NET_ADMIN` để thực thi `iptables` trên bridge `br-ics` —
+nơi thực sự xử lý traffic ICS. Backend chỉ quản lý **quy trình + audit** (bảng
+`response_actions`); executor poll backend, chỉ thực thi hành động đã được duyệt,
+rồi báo kết quả về.
+
+Quy trình bắt buộc có người duyệt:
+```
+đề xuất (suggested) → operator DUYỆT (approved) → executor thực thi (executed)
+                                                 → hoàn tác (undo_requested → undone)
+```
+
+#### 4.10.2. Biện pháp và giao diện
+
+- **block_ip** cho cảnh báo Critical/High/Medium: chặn IP nguồn bằng `iptables
+  -I DOCKER-USER -s <IP> -j DROP` (idempotent, gỡ được); **monitor** cho Low.
+- API: `POST /api/responses` (đề xuất), `/approve`, `/undo`, `/result`, `GET
+  /api/responses`.
+- Dashboard: nút **"Đề xuất chặn"** ở trang Cảnh báo → tab **"Ứng phó"** để
+  **Duyệt / Hoàn tác**, kèm nhật ký audit.
+
+#### 4.10.3. Kết quả kiểm thử (vòng đầy đủ)
+
+| Bước | Kết quả |
+|---|---|
+| Đề xuất cho cảnh báo Critical | Đạt — `block_ip` nhắm `172.28.0.66`, trạng thái `suggested` |
+| Operator duyệt | Đạt — chuyển `approved` |
+| Executor thực thi | Đạt — `executed`; attacker `.66` **mất kết nối tới PLC** |
+| Thiết bị khác / HMI | Đạt — vẫn hoạt động (chặn đúng mục tiêu) |
+| Hoàn tác | Đạt — `undone`; `.66` kết nối lại được |
+
+#### 4.10.4. Giới hạn (đúng bản chất an ninh OT)
+
+Chặn IP **không tự khôi phục trạng thái vật lý** của PLC (van/bơm/setpoint đã bị
+thay đổi vẫn giữ nguyên). Khôi phục quá trình vật lý là **hành động riêng** (đã mô
+tả thiết kế ở mục 4.8), hiện chưa tự động hóa — đây là ranh giới cố ý: cắt nguồn
+tấn công trước, phục hồi vật lý sau và phải xác minh.
+
+### 4.11. Các giai đoạn tiếp theo
+
+*(Còn lại: gom cảnh báo thành sự cố (GĐ6) và demo + đánh giá định lượng (GĐ9).)*
 
 ---
 

@@ -8,9 +8,9 @@ Luồng mục tiêu: **Monitor → Discover → Detect → Alert → Investigate
 
 ## Trạng thái hiện tại
 
-Đã hoàn thành **Giai đoạn 1–5** (trọn Monitor → Discover → Detect → Alert) và một
-đợt rà soát/củng cố độ tin cậy. Đang chờ làm: quản lý sự cố (6), ứng phó có duyệt
-(7), dashboard (8), demo & đánh giá (9). Chi tiết xem [docs/BaoCao.md](docs/BaoCao.md).
+Đã hoàn thành **Giai đoạn 1–5, 7, 8** — trọn luồng **Monitor → Discover → Detect →
+Alert → Investigate → Respond** — cùng một đợt rà soát/củng cố độ tin cậy. Đang chờ
+làm: gom sự cố (6), demo & đánh giá (9). Chi tiết xem [docs/BaoCao.md](docs/BaoCao.md).
 
 ## Kiến trúc
 
@@ -141,8 +141,8 @@ Các giai đoạn sau: React + React Flow (dashboard), iptables/nftables (ứng 
 | 4 | Phát hiện thiết bị | Suy ra tài sản và kết nối từ traffic — **đã xong** |
 | 5 | Detection + attacker | Baseline + 6 luật phát hiện, mỗi luật kèm script tấn công — **đã xong** |
 | 6 | Cảnh báo + incident | Phân mức, bằng chứng, gom cảnh báo thành incident |
-| 7 | Ứng phó | Gợi ý hành động, operator duyệt, thực thi iptables, hoàn tác |
-| 8 | Dashboard | React: tổng quan, tài sản, topology, cảnh báo, duyệt phản ứng |
+| 7 | Ứng phó | Gợi ý hành động, operator duyệt, thực thi iptables, hoàn tác — **đã xong** |
+| 8 | Dashboard | React: tổng quan, tài sản, topology, cảnh báo, ứng phó — **đã xong** |
 | 9 | Demo + đánh giá | Kịch bản tràn bồn, đo tỉ lệ phát hiện/báo động giả, báo cáo |
 
 ### Sáu luật phát hiện (giai đoạn 5)
