@@ -8,9 +8,14 @@ Luồng mục tiêu: **Monitor → Discover → Detect → Alert → Investigate
 
 ## Trạng thái hiện tại
 
-Đã hoàn thành **Giai đoạn 1–8** — trọn luồng **Monitor → Discover → Detect →
-Alert → Investigate → Respond** — cùng một đợt rà soát/củng cố độ tin cậy. Đang chờ
-làm: demo & đánh giá định lượng (9). Chi tiết xem [docs/BaoCao.md](docs/BaoCao.md).
+Đã hoàn thành **cả 9 giai đoạn** — trọn luồng **Monitor → Discover → Detect →
+Alert → Investigate → Respond** — cùng một đợt rà soát/củng cố độ tin cậy và đánh
+giá định lượng tự động. Chi tiết xem [docs/BaoCao.md](docs/BaoCao.md).
+
+**Kết quả đánh giá** ([docs/evaluation.json](docs/evaluation.json)): phát hiện **6/6**
+kịch bản, **0** báo động giả trong 90 giây lưu lượng bình thường, độ trễ phát hiện
+trung bình **150,7 ms**, 13 cảnh báo gom thành 6 sự cố, **1,06 s** từ lúc duyệt đến
+khi chặn IP có hiệu lực.
 
 ## Kiến trúc
 
@@ -35,8 +40,14 @@ làm: demo & đánh giá định lượng (9). Chi tiết xem [docs/BaoCao.md](d
 - **Backend** ([lab/backend.py](lab/backend.py)): nhận/kiểm tra/lưu event, phát hiện
   thiết bị, Detection Engine, WebSocket. API dưới.
 - **Detection Engine** ([lab/detection.py](lab/detection.py)): học baseline rồi áp
-  6 luật phát hiện.
+  6 luật phát hiện; backend gom cảnh báo cùng nguồn thành **sự cố**.
+- **Responder** ([lab/responder.py](lab/responder.py)): executor chặn IP bằng
+  iptables trên `br-ics`, chỉ thực thi biện pháp đã được người vận hành duyệt.
+- **Dashboard** ([web/index.html](web/index.html)): 7 trang — Tổng quan, Thiết bị,
+  Topology, Live Traffic, Cảnh báo, Sự cố, Ứng phó — tại http://localhost:8000.
 - **Máy tấn công** ([lab/attacker.py](lab/attacker.py)): các kịch bản kiểm chứng.
+- **Đánh giá** ([tools/evaluate.py](tools/evaluate.py)): đo tự động tỉ lệ phát hiện,
+  báo động giả, độ trễ, thời gian ứng phó.
 
 - **PLC** ([lab/plc_sim.py](lab/plc_sim.py)): Modbus/TCP server, chu kỳ quét
   0,5 giây. Bật bơm khi mức nước xuống dưới ngưỡng thấp, tắt khi vượt ngưỡng
@@ -110,10 +121,23 @@ docker run --rm --network project3_ics_net --ip 172.28.0.66 ics-lab python attac
 curl http://localhost:8000/api/alerts                      # thấy cảnh báo Critical
 ```
 
-Các mode tấn công khác: `probe` (thiết bị lạ), `recon` (truy cập thanh ghi bất
-thường), `dos` (tần suất), `scan` (quét cổng). Kẻ tấn công chuyển PLC sang chế độ
-tay (`auto=0`), đóng van, ép bơm — vô hiệu hóa điều khiển an toàn và làm tràn bồn;
-đây là điểm yếu **chủ ý** của lab để minh họa.
+Các mode kiểm thử khác: `probe` (thiết bị lạ), `recon` (truy cập thanh ghi bất
+thường), `dos` (tần suất), `scan` (quét cổng). Kịch bản `write` chuyển PLC sang chế
+độ tay (`auto=0`), đóng van, ép bơm — vô hiệu hóa điều khiển an toàn và làm tràn
+bồn; đây là điểm yếu **chủ ý** của lab để minh họa.
+
+Trên dashboard: tab **Sự cố** → "Đề xuất chặn" → tab **Ứng phó** → "Duyệt & thực thi"
+→ nguồn bị chặn; "Hoàn tác" để gỡ.
+
+## Đánh giá định lượng
+
+```bash
+python3 tools/evaluate.py    # DỰNG LẠI lab sạch (xóa dữ liệu CSDL lab), ~3 phút
+```
+
+Script học baseline, đo báo động giả trong 90 giây bình thường, chạy 6 kịch bản từ
+các IP riêng (gồm ca ghi sai từ chính HMI), thử quy trình ứng phó, rồi ghi kết quả
+ra `docs/evaluation.json`.
 
 ## Bắt gói trên macOS
 
@@ -124,8 +148,8 @@ switch thật.
 
 ## Công nghệ
 
-Python · pymodbus 3.15 · Scapy · FastAPI + WebSocket · PostgreSQL · Docker Compose.
-Các giai đoạn sau: React + React Flow (dashboard), iptables/nftables (ứng phó).
+Python · pymodbus 3.15 · Scapy · FastAPI + WebSocket · PostgreSQL · React (CDN) ·
+iptables · Docker Compose.
 
 > Lưu ý: PLC viết bằng Python thay cho OpenPLC để có lab chạy ngay. Hệ giám sát
 > chỉ nhìn gói Modbus/TCP nên có thể thay bằng OpenPLC sau mà không ảnh hưởng
@@ -143,7 +167,7 @@ Các giai đoạn sau: React + React Flow (dashboard), iptables/nftables (ứng 
 | 6 | Cảnh báo + incident | Phân mức, bằng chứng, gom cảnh báo thành incident — **đã xong** |
 | 7 | Ứng phó | Gợi ý hành động, operator duyệt, thực thi iptables, hoàn tác — **đã xong** |
 | 8 | Dashboard | React: tổng quan, tài sản, topology, cảnh báo, ứng phó — **đã xong** |
-| 9 | Demo + đánh giá | Kịch bản tràn bồn, đo tỉ lệ phát hiện/báo động giả, báo cáo |
+| 9 | Demo + đánh giá | Kịch bản tràn bồn, đo tỉ lệ phát hiện/báo động giả, báo cáo — **đã xong** |
 
 ### Sáu luật phát hiện (giai đoạn 5)
 

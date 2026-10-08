@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-10-08 10:03:04",
+  "runtime_s": 162,
+  "baseline": {
+    "frozen": true,
+    "devices": 2,
+    "connections": 1,
+    "write_rules": 1,
+    "writers": [
+      "172.28.0.20"
+    ]
+  },
+  "normal": {
+    "duration_s": 90,
+    "modbus_events": 730,
+    "write_requests": 9,
+    "false_positive_alerts": 0,
+    "false_positive_incidents": 0,
+    "hmi_peak_rate_req_s": 5
+  },
+  "scenarios": [
+    {
+      "scenario": "probe",
+      "src_ip": "172.28.0.61",
+      "expected_rule": "unknown_device",
+      "detected": true,
+      "rules_fired": [
+        "new_connection",
+        "unknown_device"
+      ],
+      "alerts": 2,
+      "incidents": 1,
+      "latency_ms_key_rule": 243.8,
+      "latency_ms_max": 243.8,
+      "peak_rate_req_s": 1
+    },
+    {
+      "scenario": "recon",
+      "src_ip": "172.28.0.62",
+      "expected_rule": "abnormal_register",
+      "detected": true,
+      "rules_fired": [
+        "abnormal_register",
+        "new_connection",
+        "unknown_device"
+      ],
+      "alerts": 3,
+      "incidents": 1,
+      "latency_ms_key_rule": 211.4,
+      "latency_ms_max": 211.8,
+      "peak_rate_req_s": 30
+    },
+    {
+      "scenario": "dos",
+      "src_ip": "172.28.0.63",
+      "expected_rule": "dos",
+      "detected": true,
+      "rules_fired": [
+        "dos",
+        "new_connection",
+        "unknown_device"
+      ],
+      "alerts": 3,
+      "incidents": 1,
+      "latency_ms_key_rule": 182.0,
+      "latency_ms_max": 186.1,
+      "peak_rate_req_s": 227
+    },
+    {
+      "scenario": "scan",
+      "src_ip": "172.28.0.64",
+      "expected_rule": "port_scan",
+      "detected": true,
+      "rules_fired": [
+        "port_scan"
+      ],
+      "alerts": 1,
+      "incidents": 1,
+      "latency_ms_key_rule": 126.1,
+      "latency_ms_max": 126.1,
+      "peak_rate_req_s": 0
+    },
+    {
+      "scenario": "write",
+      "src_ip": "172.28.0.65",
+      "expected_rule": "unauthorized_write",
+      "detected": true,
+      "rules_fired": [
+        "new_connection",
+        "unauthorized_write",
+        "unknown_device"
+      ],
+      "alerts": 3,
+      "incidents": 1,
+      "latency_ms_key_rule": 55.3,
+      "latency_ms_max": 55.3,
+      "peak_rate_req_s": 3
+    },
+    {
+      "scenario": "write_from_hmi",
+      "src_ip": "172.28.0.20",
+      "expected_rule": "unauthorized_write",
+      "detected": true,
+      "rules_fired": [
+        "unauthorized_write"
+      ],
+      "alerts": 1,
+      "incidents": 1,
+      "latency_ms_key_rule": 85.5,
+      "latency_ms_max": 85.5,
+      "peak_rate_req_s": 7
+    }
+  ],
+  "response": {
+    "action": "block_ip",
+    "target": "172.28.0.65",
+    "status": "executed",
+    "approve_to_executed_s": 1.06,
+    "reach_before": true,
+    "reach_after_block": false,
+    "reach_after_undo": true,
+    "other_device_reaches_plc": true
+  },
+  "summary": {
+    "scenarios": 6,
+    "detected": 6,
+    "detection_rate": 1.0,
+    "false_positive_incidents_normal": 0,
+    "latency_ms_mean": 150.7,
+    "latency_ms_max": 243.8,
+    "alerts_total": 13,
+    "incidents_total": 6
+  }
+}

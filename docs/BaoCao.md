@@ -12,13 +12,14 @@
 | Thời gian | Học kỳ *(điền)* |
 
 > **Ghi chú về trạng thái:** Báo cáo được viết theo tiến độ thực hiện. Tính đến
-> bản này, **các Giai đoạn 1–8 đã hoàn thành và kiểm thử**: mô hình ICS giả lập
+> bản này, **cả 9 giai đoạn đã hoàn thành và kiểm thử**: mô hình ICS giả lập
 > và công cụ phân tích gói (GĐ1), sensor bắt và phân tích Modbus (GĐ2), backend
 > + cơ sở dữ liệu + WebSocket (GĐ3), phát hiện thiết bị và kết nối (GĐ4), học
 > baseline và phát hiện tấn công (GĐ5), **quản lý sự cố (GĐ6)**, **ứng phó có
 > duyệt (GĐ7)** và **Dashboard giám sát (GĐ8)** — tức **trọn luồng Monitor →
-> Discover → Detect → Alert → Investigate → Respond**. Còn lại: demo + đánh giá
-> định lượng (GĐ9). Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
+> Discover → Detect → Alert → Investigate → Respond** — và **đánh giá định lượng
+> (GĐ9)**: phát hiện 6/6 kịch bản, 0 báo động giả, độ trễ trung bình 150,7 ms (mục
+> 4.12). Dự án cũng đã trải qua một **đợt rà soát và
 > củng cố** (mục 4.7): sửa các lỗi về ghép luồng TCP, giải mã, độ tin cậy
 > truyền/lưu event, kiểm tra đầu vào và logic PLC/HMI.
 
@@ -295,8 +296,8 @@ tảng giám sát** (sensor, backend, cơ sở dữ liệu, dashboard).
 | 5 | Baseline + luật phát hiện + script tấn công | **Hoàn thành** (6/6 luật, gồm quét cổng) |
 | 6 | Quản lý cảnh báo và sự cố | **Hoàn thành** (gom sự cố + Ack/Resolve theo sự cố) |
 | 7 | Hỗ trợ ứng phó có xác nhận | **Hoàn thành** (đề xuất + chặn IP có duyệt + hoàn tác) |
-| 8 | Dashboard | **Hoàn thành** (6 trang + Acknowledge/Resolve) |
-| 9 | Demo và đánh giá | *(kế hoạch)* |
+| 8 | Dashboard | **Hoàn thành** (7 trang + Acknowledge/Resolve) |
+| 9 | Demo và đánh giá | **Hoàn thành** (script đánh giá tự động + kịch bản demo) |
 
 ---
 
@@ -742,7 +743,8 @@ quán của thiết kế. Các nhóm vấn đề đã xử lý và cách kiểm 
 ### 4.8. Thiết kế ứng phó và đánh giá
 
 > **Cập nhật:** phần **ứng phó** dưới đây nay **đã được triển khai** — xem mục
-> 4.10. Phần **đánh giá** (Giai đoạn 9) vẫn ở mức thiết kế.
+> 4.10. Phần **đánh giá** (Giai đoạn 9) cũng đã được thực hiện theo đúng các nguyên
+> tắc dưới đây — xem mục 4.12.
 
 Phần này mô tả thiết kế và *hợp đồng dữ liệu* làm cơ sở cho việc hiện thực.
 
@@ -796,7 +798,9 @@ nhật **thời gian thực qua WebSocket** kết hợp poll định kỳ các A
 | Cảnh báo | `/api/alerts` + `WS /ws` | Bảng cảnh báo theo mức, xem bằng chứng, nút **Acknowledge/Resolve** |
 
 Nút Acknowledge/Resolve gọi `POST /api/alerts/{id}/status` để đổi trạng thái cảnh
-báo (`new → acknowledged → resolved`).
+báo (`new → acknowledged → resolved`). Ở các giai đoạn sau, dashboard được bổ sung
+thêm hai trang: **Ứng phó** (mục 4.10) và **Sự cố** (mục 4.11), nâng tổng số lên 7
+trang.
 
 #### 4.9.3. Kết quả kiểm thử
 
@@ -899,9 +903,98 @@ nghiêm trọng nhất của sự cố (nối sang quy trình ứng phó ở m�
 | Resolve sự cố | Đạt — mọi cảnh báo con chuyển `resolved` |
 | Độ trễ capture → cảnh báo | 59–221 ms trong lần thử này (đo đầy đủ ở Giai đoạn 9) |
 
-### 4.12. Các giai đoạn tiếp theo
+### 4.12. Giai đoạn 9: Đánh giá định lượng và kịch bản demo
 
-*(Còn lại: demo + đánh giá định lượng (GĐ9).)*
+#### 4.12.1. Phương pháp đánh giá
+
+Việc đánh giá được tự động hóa bằng script `tools/evaluate.py` để kết quả **tái lập
+được**. Mỗi lần chạy: dựng lại lab sạch → học baseline 25 giây → chốt → để lưu
+lượng **bình thường** chạy 90 giây → lần lượt chạy 6 kịch bản kiểm thử, **mỗi kịch
+bản từ một địa chỉ nguồn riêng** → thử quy trình ứng phó → ghi toàn bộ số liệu ra
+`docs/evaluation.json`.
+
+Các nguyên tắc đo (theo thiết kế ở mục 4.8):
+
+- **Phát hiện tính theo kịch bản/sự cố**, không theo từng cảnh báo hay từng gói. Một
+  kịch bản được tính là *phát hiện* khi **luật chính** của nó kích hoạt.
+- Riêng kịch bản *ghi sai từ chính HMI* (thiết bị tin cậy) còn yêu cầu **không được**
+  báo nhầm là "thiết bị lạ" — để kiểm tra luật ghi theo chữ ký hoạt động độc lập với
+  danh tính IP.
+- **Báo động giả** = cảnh báo/sự cố sinh ra trong giai đoạn chỉ có lưu lượng bình
+  thường.
+- **Độ trễ phát hiện** = `detected_at − ts`: từ lúc bắt gói gây cảnh báo tới lúc sinh
+  cảnh báo (hai mốc cùng đồng hồ của máy ảo Docker).
+
+#### 4.12.2. Giai đoạn lưu lượng bình thường
+
+| Chỉ số | Giá trị |
+|---|---|
+| Thời gian quan sát | 90 giây |
+| Số sự kiện Modbus | 730 |
+| Lệnh ghi hợp lệ của HMI | 9 |
+| Tần suất đỉnh của HMI | 5 request/giây |
+| **Cảnh báo giả** | **0** |
+| **Sự cố giả** | **0** |
+
+#### 4.12.3. Kết quả theo từng kịch bản
+
+| Kịch bản | Nguồn | Luật chính | Kết quả | Các luật kích hoạt | Cảnh báo → Sự cố | Độ trễ (luật chính) |
+|---|---|---|---|---|---|---|
+| probe | .61 | unknown_device | Phát hiện | unknown_device, new_connection | 2 → 1 | 243,8 ms |
+| recon | .62 | abnormal_register | Phát hiện | abnormal_register, unknown_device, new_connection | 3 → 1 | 211,4 ms |
+| dos | .63 | dos | Phát hiện | dos, unknown_device, new_connection | 3 → 1 | 182,0 ms |
+| scan | .64 | port_scan | Phát hiện | port_scan | 1 → 1 | 126,1 ms |
+| write (tràn bồn) | .65 | unauthorized_write | Phát hiện | unauthorized_write, unknown_device, new_connection | 3 → 1 | 55,3 ms |
+| write từ HMI | .20 | unauthorized_write | Phát hiện | **chỉ** unauthorized_write | 1 → 1 | 85,5 ms |
+
+Kịch bản *scan* chỉ có cảnh báo quét cổng vì các gói quét là gói SYN tới nhiều
+cổng, không phải request Modbus. Kịch bản *write từ HMI* chỉ kích hoạt đúng luật ghi
+trái phép, không có "thiết bị lạ" hay "kết nối mới" — vì HMI nằm trong baseline,
+nhưng lệnh ghi coil không khớp chữ ký ghi hợp lệ của nó.
+
+#### 4.12.4. Kết quả ứng phó
+
+Với sự cố của kịch bản *write* (nguồn `.65`): đề xuất `block_ip` → operator duyệt →
+executor báo đã thực thi sau **1,06 giây**. Trước khi chặn nguồn này đọc được PLC;
+sau khi chặn **không còn tới được**; một thiết bị khác (`.50`) vẫn tới được PLC
+(chặn đúng mục tiêu); sau khi hoàn tác, nguồn `.65` tới được trở lại.
+
+#### 4.12.5. Tổng hợp
+
+| Chỉ số | Kết quả |
+|---|---|
+| Tỉ lệ phát hiện (theo kịch bản) | **6/6 = 100%** |
+| Báo động giả (90 giây bình thường) | **0** |
+| Độ trễ phát hiện trung bình / lớn nhất | **150,7 ms / 243,8 ms** |
+| Gom sự cố | **13 cảnh báo → 6 sự cố** (mỗi kịch bản đúng một sự cố) |
+| Thời gian từ duyệt đến chặn có hiệu lực | **1,06 giây** |
+
+#### 4.12.6. Nhận xét và giới hạn của đánh giá
+
+- **Quy mô nhỏ:** một lần chạy, 6 kịch bản, 90 giây bình thường. Kết quả là minh
+  chứng chức năng; muốn kết luận có ý nghĩa thống kê cần chạy lặp nhiều lần, quan
+  sát bình thường dài hơn và thêm biến thể kịch bản.
+- **Kịch bản do chính nhóm thiết kế** và biết trước luật, nên đánh giá chưa đo được
+  khả năng phát hiện các hành vi chưa biết.
+- **Biên của ngưỡng DoS hẹp ở phía dưới:** kịch bản *recon* đạt đỉnh 30 request/giây,
+  đúng bằng ngưỡng, nên không kích luật DoS (luật yêu cầu *hơn* 30) — nó vẫn bị phát
+  hiện qua luật truy cập thanh ghi bất thường. Kịch bản *dos* đạt đỉnh 227
+  request/giây, vượt xa ngưỡng. Một đợt gửi dồn dập nhưng giữ dưới 30 request/giây sẽ
+  không bị luật DoS bắt và phải trông vào các luật khác.
+- **Độ trễ** chủ yếu đến từ chu kỳ gom lô 0,5 giây của sensor; giảm chu kỳ này sẽ
+  giảm độ trễ nhưng tăng số lần gọi API.
+
+#### 4.12.7. Kịch bản demo khi bảo vệ
+
+```bash
+docker compose up -d --build                               # dựng toàn bộ hệ thống
+open http://localhost:8000                                 # mở dashboard
+# chờ ~25 giây cho baseline học lưu lượng bình thường, rồi bấm "Chốt baseline"
+docker run --rm --network project3_ics_net --ip 172.28.0.66 ics-lab python attacker.py write
+# Dashboard: tab Cảnh báo / Sự cố hiện sự cố Critical, Topology tô đỏ nguồn .66
+# Tab Sự cố -> "Đề xuất chặn" -> tab Ứng phó -> "Duyệt & thực thi" -> nguồn bị chặn
+# "Hoàn tác" để gỡ chặn; tái lập toàn bộ số liệu: python3 tools/evaluate.py
+```
 
 ---
 
@@ -926,18 +1019,55 @@ ro kỹ thuật sớm:
 
 ## Chương 6. Kết luận và hướng phát triển
 
-*(Sơ bộ — sẽ hoàn thiện ở cuối đồ án.)*
+### 6.1. Kết quả đạt được
 
-Đến thời điểm hiện tại, đề tài đã xây dựng thành công một **mô hình ICS giả lập**
-hoàn chỉnh dựa trên Modbus/TCP, kèm công cụ bắt và phân tích gói, tạo nền tảng cho
-việc phát triển nền tảng giám sát. Mô hình đã kiểm chứng được cả hoạt động bình
-thường lẫn khả năng bị thao túng, phục vụ cho việc phát triển và đánh giá các luật
-phát hiện.
+Đề tài đã xây dựng hoàn chỉnh một nền tảng giám sát an ninh cho mạng ICS/OT dùng
+Modbus/TCP, hiện thực trọn luồng **Monitor → Discover → Detect → Alert →
+Investigate → Respond** trên một mô hình nhà máy nước giả lập:
 
-Hướng phát triển tiếp theo bám theo lộ trình ở mục 3.4: hoàn thiện sensor, backend
-và cơ sở dữ liệu, bộ luật phát hiện, dashboard, và cuối cùng là kịch bản demo kèm
-đánh giá định lượng (tỉ lệ phát hiện, tỉ lệ báo động giả, độ trễ phát hiện). Có
-thể thay PLC phần mềm bằng OpenPLC để tăng tính thực tế.
+- **Mô hình ICS giả lập** (PLC bồn nước, HMI) chạy trong Docker, tạo lưu lượng
+  Modbus thật và minh họa được hậu quả vật lý của tấn công (tràn bồn).
+- **Sensor giám sát thụ động**: ghép luồng TCP, giải mã đầy đủ Modbus, ghép
+  request–response, gửi event tin cậy (không mất, không trùng).
+- **Backend + CSDL + WebSocket**: kiểm tra đầu vào, lưu trữ, tự nhận diện thiết bị
+  và kết nối, đẩy dữ liệu thời gian thực.
+- **Detection Engine** học baseline rồi áp **6 luật** (ghi trái phép theo chữ ký,
+  thiết bị lạ, tần suất bất thường, truy cập thanh ghi bất thường, quét cổng, kết nối
+  mới); cảnh báo 4 mức kèm bằng chứng, **gom thành sự cố**.
+- **Ứng phó có duyệt**: đề xuất biện pháp, chặn IP bằng iptables chỉ sau khi người
+  vận hành duyệt, hoàn tác được, có nhật ký audit.
+- **Dashboard web** 7 trang cho toàn bộ quy trình.
+
+Đánh giá tự động (mục 4.12) cho kết quả: **phát hiện 6/6 kịch bản**, **0 báo động
+giả** trong 90 giây lưu lượng bình thường, **độ trễ phát hiện trung bình 150,7 ms**,
+13 cảnh báo được gom thành 6 sự cố, và **1,06 giây** từ lúc duyệt đến khi chặn có
+hiệu lực.
+
+### 6.2. Hạn chế
+
+- **Quy mô đánh giá nhỏ** và kịch bản do nhóm tự thiết kế — chưa đo được khả năng
+  phát hiện hành vi chưa biết.
+- **Phụ thuộc giả định "mạng sạch" khi học baseline**: nếu học lúc đang bị tấn công,
+  hành vi tấn công sẽ bị coi là bình thường.
+- **Ngưỡng cố định** (tần suất, quét cổng) chưa tự thích nghi; tấn công giữ dưới
+  ngưỡng tần suất không bị luật DoS bắt.
+- **Ứng phó mới dừng ở cô lập nguồn**: chặn IP không tự khôi phục trạng thái vật lý
+  của PLC (van, bơm, setpoint); việc phục hồi vẫn do người vận hành thực hiện.
+- **Môi trường giả lập**: PLC viết bằng Python thay cho PLC thật/OpenPLC; ghép luồng
+  TCP resync khi gói đến khác thứ tự thay vì sắp xếp lại đầy đủ.
+
+### 6.3. Hướng phát triển
+
+- Thay PLC giả lập bằng **OpenPLC** hoặc thiết bị thật; mở rộng sang các giao thức
+  khác (DNP3, S7, EtherNet/IP).
+- **Đánh giá quy mô lớn hơn**: chạy lặp, quan sát dài hạn, dùng bộ dữ liệu ICS công
+  khai và các kịch bản chưa biết trước.
+- **Baseline nâng cao**: kiểm tra theo dải giá trị cho lệnh ghi, ngưỡng thích nghi
+  theo thống kê, mô hình học máy phát hiện bất thường.
+- **Tự động hóa phục hồi có kiểm soát**: khôi phục setpoint/chế độ auto qua kênh vận
+  hành được phép, kèm bước xác minh trạng thái vật lý.
+- **Tăng cường bảo mật cho chính nền tảng**: xác thực sensor bằng chứng chỉ (mTLS),
+  phân quyền người dùng dashboard, mã hóa dữ liệu lưu trữ.
 
 ---
 
@@ -951,7 +1081,9 @@ thể thay PLC phần mềm bằng OpenPLC để tăng tính thực tế.
 6. Scapy — Tài liệu thư viện — https://scapy.readthedocs.io/
 7. FastAPI — Tài liệu khung web — https://fastapi.tiangolo.com/
 8. PostgreSQL — Tài liệu — https://www.postgresql.org/docs/
-9. *(Bổ sung các nguồn khác khi hoàn thiện các chương sau.)*
+9. Netfilter / iptables — Tài liệu — https://www.netfilter.org/documentation/
+10. Docker — Packet filtering and firewalls (chuỗi DOCKER-USER) — https://docs.docker.com/engine/network/packet-filtering-firewalls/
+11. React — Tài liệu — https://react.dev/
 
 ---
 
@@ -960,16 +1092,20 @@ thể thay PLC phần mềm bằng OpenPLC để tăng tính thực tế.
 Yêu cầu: Docker Desktop đang chạy.
 
 ```bash
-# Khởi động mô hình ICS giả lập
+# Khởi động toàn bộ hệ thống (plc, hmi, sensor, backend, responder, db)
 docker compose up -d --build
+open http://localhost:8000      # dashboard
 docker compose logs -f plc      # theo dõi mức nước dao động 30%–80%
-docker compose logs -f hmi      # theo dõi HMI đọc trạng thái PLC
+docker compose logs -f sensor   # theo dõi event Modbus giải mã
 
 # Bắt gói Modbus ra file để phân tích bằng Wireshark
 ./lab/capture.sh 30 capture.pcap
 open -a Wireshark capture.pcap
 
-# Dừng mô hình
+# Tái lập toàn bộ số liệu đánh giá (DỰNG LẠI lab sạch, ~3 phút)
+python3 tools/evaluate.py       # kết quả ghi ra docs/evaluation.json
+
+# Dừng hệ thống (thêm -v để xóa dữ liệu CSDL)
 docker compose down
 ```
 
