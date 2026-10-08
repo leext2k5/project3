@@ -74,7 +74,8 @@ function Overview({stats, alerts, onBaseline}){
     ['Sự kiện Modbus', stats.total_events], ['Gói TCP (SYN)', stats.tcp_events],
     ['Lệnh ghi', stats.write_requests], ['Gói lỗi', stats.exceptions],
     ['Thiết bị', stats.assets], ['Kết nối', stats.connections],
-    ['Cảnh báo', stats.alerts], ['Quarantine', stats.quarantined],
+    ['Cảnh báo', stats.alerts], ['Sự cố đang mở', stats.open_incidents],
+    ['Quarantine', stats.quarantined],
   ] : [];
   return (
     <div>
@@ -192,6 +193,54 @@ function Live({events}){
   );
 }
 
+/* ---------- Sự cố ---------- */
+function Incidents({onSuggest}){
+  const [rows,setRows] = useState([]);
+  const [detail,setDetail] = useState({});
+  const load = () => getJSON('/api/incidents').then(setRows).catch(()=>{});
+  useEffect(()=>{ load(); const id=setInterval(load,3000); return ()=>clearInterval(id); },[]);
+  const toggle = (id) => detail[id]
+    ? setDetail(d=>{ const n={...d}; delete n[id]; return n; })
+    : getJSON('/api/incidents/'+id).then(x=>setDetail(d=>({...d,[id]:x})));
+  const setStatus = (id,status) => fetch(`/api/incidents/${id}/status`,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({status})}).then(load);
+  const C = {open:'var(--crit)',acknowledged:'var(--med)',resolved:'var(--ok)'};
+  return (
+    <div className="panel">
+      <h2>Sự cố ({rows.length}) — cảnh báo cùng nguồn được gom lại</h2>
+      <table><thead><tr><th>#</th><th>Mức</th><th>Nguồn</th><th>Các luật</th><th>Số cảnh báo</th><th>Khoảng thời gian</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>{rows.map(r =>
+        <React.Fragment key={r.id}>
+        <tr>
+          <td className="muted">{r.id}</td>
+          <td><span className="sev-dot" style={{background:SEV[r.severity]}}></span>{r.severity}</td>
+          <td className="mono">{r.src_ip}</td>
+          <td className="mono muted">{(r.rules||[]).join(', ')}</td>
+          <td>{r.alert_count}</td>
+          <td className="muted">{fmtTime(r.first_ts)} – {fmtTime(r.last_ts)}</td>
+          <td><span className="pill" style={{background:'var(--panel2)',color:C[r.status]}}>{r.status}</span></td>
+          <td style={{whiteSpace:'nowrap'}}>
+            <button className="act" onClick={()=>toggle(r.id)}>Chi tiết</button>
+            <button className="act" onClick={()=>setStatus(r.id,'acknowledged')}>Ack</button>
+            <button className="act" onClick={()=>setStatus(r.id,'resolved')}>Resolve</button>
+            {r.top_alert_id && <button className="act" onClick={()=>onSuggest(r.top_alert_id)}>⛔ Đề xuất chặn</button>}
+          </td>
+        </tr>
+        {detail[r.id] && <tr><td colSpan="8">
+          {detail[r.id].alerts.map(a =>
+            <div key={a.id} className="ev">
+              <span className="sev-dot" style={{background:SEV[a.severity]}}></span>
+              [{a.severity}] {a.rule} — {a.description}
+              {a.detected_at && a.ts ? ` (trễ ${((a.detected_at-a.ts)*1000).toFixed(0)} ms)` : ''}
+            </div>)}
+        </td></tr>}
+        </React.Fragment>)}
+        {!rows.length && <tr><td colSpan="8" className="muted">Chưa có sự cố.</td></tr>}
+      </tbody></table>
+    </div>
+  );
+}
+
 /* ---------- Ứng phó ---------- */
 function Responses(){
   const [rows,setRows] = useState([]);
@@ -286,7 +335,8 @@ function App(){
     body:JSON.stringify({alert_id:alertId})}).then(()=>setTab('responses'));
   const newAlerts = alerts.filter(a=>(a.status||'new')==='new').length;
   const TABS=[['overview','Tổng quan'],['assets','Thiết bị'],['topology','Topology'],
-              ['live','Live Traffic'],['alerts','Cảnh báo'],['responses','Ứng phó']];
+              ['live','Live Traffic'],['alerts','Cảnh báo'],['incidents','Sự cố'],
+              ['responses','Ứng phó']];
   return (
     <div>
       <header>
@@ -304,6 +354,7 @@ function App(){
         {tab==='topology' && <Topology alerts={alerts}/>}
         {tab==='live' && <Live events={live}/>}
         {tab==='alerts' && <Alerts alerts={alerts} setAlerts={setAlerts} onSuggest={onSuggest}/>}
+        {tab==='incidents' && <Incidents onSuggest={onSuggest}/>}
         {tab==='responses' && <Responses/>}
       </main>
     </div>

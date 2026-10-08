@@ -57,11 +57,21 @@ CREATE TABLE IF NOT EXISTS baseline (
     data        JSONB, learned_at TIMESTAMPTZ
 );
 
+-- ts = thời điểm capture gói gây cảnh báo; detected_at = thời điểm sinh cảnh báo
+-- (epoch); created_at = thời điểm lưu. incident_id = sự cố chứa cảnh báo.
 CREATE TABLE IF NOT EXISTS alerts (
-    id          BIGSERIAL PRIMARY KEY, ts DOUBLE PRECISION,
+    id          BIGSERIAL PRIMARY KEY, ts DOUBLE PRECISION, detected_at DOUBLE PRECISION,
     severity    TEXT, rule TEXT, src_ip TEXT, dst_ip TEXT,
     description TEXT, evidence JSONB, status TEXT DEFAULT 'new',
-    created_at  TIMESTAMPTZ DEFAULT now()
+    incident_id BIGINT, created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Giai đoạn 6: sự cố = nhóm cảnh báo cùng nguồn trong một cửa sổ thời gian.
+CREATE TABLE IF NOT EXISTS incidents (
+    id          BIGSERIAL PRIMARY KEY, src_ip TEXT,
+    first_ts    DOUBLE PRECISION, last_ts DOUBLE PRECISION,
+    severity    TEXT, alert_count INTEGER DEFAULT 0, rules JSONB DEFAULT '[]'::jsonb,
+    status      TEXT DEFAULT 'open', created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_sev ON alerts (severity);
 

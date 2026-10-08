@@ -12,13 +12,13 @@
 | Thời gian | Học kỳ *(điền)* |
 
 > **Ghi chú về trạng thái:** Báo cáo được viết theo tiến độ thực hiện. Tính đến
-> bản này, **các Giai đoạn 1–5 đã hoàn thành và kiểm thử**: mô hình ICS giả lập
+> bản này, **các Giai đoạn 1–8 đã hoàn thành và kiểm thử**: mô hình ICS giả lập
 > và công cụ phân tích gói (GĐ1), sensor bắt và phân tích Modbus (GĐ2), backend
 > + cơ sở dữ liệu + WebSocket (GĐ3), phát hiện thiết bị và kết nối (GĐ4), học
-> baseline và phát hiện tấn công (GĐ5), **ứng phó có duyệt (GĐ7)** và **Dashboard
-> giám sát (GĐ8)** — tức **trọn luồng Monitor → Discover → Detect → Alert →
-> Investigate → Respond**. Còn lại: gom sự cố (GĐ6) và demo + đánh giá định lượng
-> (GĐ9). Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
+> baseline và phát hiện tấn công (GĐ5), **quản lý sự cố (GĐ6)**, **ứng phó có
+> duyệt (GĐ7)** và **Dashboard giám sát (GĐ8)** — tức **trọn luồng Monitor →
+> Discover → Detect → Alert → Investigate → Respond**. Còn lại: demo + đánh giá
+> định lượng (GĐ9). Những mục chưa làm xong được đánh dấu *(kế hoạch)*. Dự án cũng đã trải qua một **đợt rà soát và
 > củng cố** (mục 4.7): sửa các lỗi về ghép luồng TCP, giải mã, độ tin cậy
 > truyền/lưu event, kiểm tra đầu vào và logic PLC/HMI.
 
@@ -293,7 +293,7 @@ tảng giám sát** (sensor, backend, cơ sở dữ liệu, dashboard).
 | 3 | Backend + cơ sở dữ liệu + WebSocket | **Hoàn thành** |
 | 4 | Phát hiện thiết bị và kết nối | **Hoàn thành** |
 | 5 | Baseline + luật phát hiện + script tấn công | **Hoàn thành** (6/6 luật, gồm quét cổng) |
-| 6 | Quản lý cảnh báo và sự cố | *(kế hoạch)* |
+| 6 | Quản lý cảnh báo và sự cố | **Hoàn thành** (gom sự cố + Ack/Resolve theo sự cố) |
 | 7 | Hỗ trợ ứng phó có xác nhận | **Hoàn thành** (đề xuất + chặn IP có duyệt + hoàn tác) |
 | 8 | Dashboard | **Hoàn thành** (6 trang + Acknowledge/Resolve) |
 | 9 | Demo và đánh giá | *(kế hoạch)* |
@@ -692,7 +692,7 @@ Sau khi học baseline (2 thiết bị, 1 kết nối, chữ ký ghi hợp lệ 
 | Không báo động giả | Đạt — **0 cảnh báo** trong suốt lưu lượng bình thường sau khi chốt baseline |
 | Ghi trái phép | Đạt — cảnh báo **Critical**: ghi coil `auto` từ `172.28.0.66` |
 | Thiết bị lạ | Đạt — cảnh báo **High**: `172.28.0.66` không có trong baseline |
-| DoS | Đạt — cảnh báo **High**: ~31 request/giây từ `172.28.0.66` |
+| DoS | Đạt — cảnh báo **High**: vượt ngưỡng 30 request trong 1 giây từ `172.28.0.66` |
 | Truy cập thanh ghi bất thường | Đạt — cảnh báo **Medium**: exception code 2 |
 | Quét cổng | Đạt — cảnh báo **Medium**: 11 cổng khác nhau từ `172.28.0.66` trong 5s |
 | Kết nối mới | Đạt — cảnh báo **Low**: `172.28.0.66 → 172.28.0.10:502` |
@@ -849,9 +849,59 @@ thay đổi vẫn giữ nguyên). Khôi phục quá trình vật lý là **hành
 tả thiết kế ở mục 4.8), hiện chưa tự động hóa — đây là ranh giới cố ý: cắt nguồn
 tấn công trước, phục hồi vật lý sau và phải xác minh.
 
-### 4.11. Các giai đoạn tiếp theo
+### 4.11. Giai đoạn 6: Quản lý cảnh báo và sự cố
 
-*(Còn lại: gom cảnh báo thành sự cố (GĐ6) và demo + đánh giá định lượng (GĐ9).)*
+#### 4.11.1. Vấn đề cần giải quyết
+
+Một cuộc tấn công thường kích hoạt **nhiều luật cùng lúc**: kịch bản tràn bồn từ
+một máy lạ sinh đồng thời cảnh báo *thiết bị lạ*, *kết nối mới* và *ghi trái phép*.
+Nếu người vận hành phải xử lý từng cảnh báo rời rạc thì dễ quá tải và khó nhìn ra
+bức tranh tổng thể. Giai đoạn này **gom các cảnh báo liên quan thành một sự cố
+(incident)** để điều tra và xử lý như một đơn vị.
+
+#### 4.11.2. Thuật toán gom sự cố
+
+Khi lưu mỗi cảnh báo, backend tìm sự cố **chưa giải quyết** của **cùng nguồn** có
+cảnh báo gần nhất cách không quá **300 giây** (cửa sổ `INCIDENT_WINDOW`):
+
+- Nếu có → gắn cảnh báo vào sự cố đó: cập nhật thời điểm đầu/cuối, tăng số cảnh
+  báo, bổ sung luật vào danh sách luật (không trùng), và nâng **mức sự cố = mức
+  cao nhất** trong các cảnh báo (Critical > High > Medium > Low).
+- Nếu không → mở sự cố mới.
+
+Việc gom diễn ra trong **cùng giao dịch** với việc lưu event và cảnh báo nên dữ
+liệu luôn nhất quán. Sự cố đã *resolved* không nhận thêm cảnh báo: nếu nguồn đó
+tấn công lại, một sự cố mới được mở.
+
+Mỗi cảnh báo nay lưu ba mốc thời gian tách biệt: `ts` (capture gói gây cảnh báo),
+`detected_at` (sinh cảnh báo) và `created_at` (lưu vào CSDL) — làm cơ sở đo độ trễ
+phát hiện ở Giai đoạn 9.
+
+#### 4.11.3. API và giao diện
+
+| Phương thức | Đường dẫn | Chức năng |
+|---|---|---|
+| GET | `/api/incidents` | Danh sách sự cố (mức, nguồn, các luật, số cảnh báo, khoảng thời gian) |
+| GET | `/api/incidents/{id}` | Chi tiết sự cố kèm toàn bộ cảnh báo và bằng chứng |
+| POST | `/api/incidents/{id}/status` | Ack/Resolve cả sự cố (áp luôn cho các cảnh báo con) |
+
+Dashboard có thêm tab **"Sự cố"**: xem chi tiết từng sự cố (kèm độ trễ phát hiện
+của từng cảnh báo), Ack/Resolve cả sự cố, và **"Đề xuất chặn"** dựa trên cảnh báo
+nghiêm trọng nhất của sự cố (nối sang quy trình ứng phó ở mục 4.10).
+
+#### 4.11.4. Kết quả kiểm thử
+
+| Nội dung | Kết quả |
+|---|---|
+| Migration trên CSDL cũ | Đạt — tự thêm bảng `incidents`, cột `incident_id`, `detected_at`; dữ liệu cũ giữ nguyên |
+| Gom sự cố | Đạt — 7 cảnh báo từ hai nguồn → **2 sự cố**; sự cố của `.66` gom 5 cảnh báo thuộc 5 luật khác nhau, mức **Critical** |
+| Chi tiết sự cố | Đạt — trả đủ 5 cảnh báo kèm bằng chứng |
+| Resolve sự cố | Đạt — mọi cảnh báo con chuyển `resolved` |
+| Độ trễ capture → cảnh báo | 59–221 ms trong lần thử này (đo đầy đủ ở Giai đoạn 9) |
+
+### 4.12. Các giai đoạn tiếp theo
+
+*(Còn lại: demo + đánh giá định lượng (GĐ9).)*
 
 ---
 

@@ -99,7 +99,20 @@ CREATE TABLE IF NOT EXISTS response_actions (
     params JSONB, status TEXT DEFAULT 'suggested', result TEXT,
     created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS incidents (
+    id BIGSERIAL PRIMARY KEY, src_ip TEXT,
+    first_ts DOUBLE PRECISION, last_ts DOUBLE PRECISION,
+    severity TEXT, alert_count INTEGER DEFAULT 0, rules JSONB DEFAULT '[]'::jsonb,
+    status TEXT DEFAULT 'open', created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS incident_id BIGINT;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS detected_at DOUBLE PRECISION;
 """
+
+# Gom cảnh báo thành sự cố: cùng nguồn, sự cố chưa resolved, cách nhau không quá
+# INCIDENT_WINDOW giây -> cùng một sự cố.
+INCIDENT_WINDOW = 300.0
+SEV_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
 UPSERT_SERVER = """
 INSERT INTO assets (ip, mac, role, role_source, mac_history, first_seen, last_seen, event_count)
@@ -230,13 +243,37 @@ async def discover(con, modbus: list[dict]) -> None:
             await con.execute(UPSERT_CLIENT, dst, None, ts)
 
 
+async def attach_incident(con, a: dict) -> int:
+    """Gắn cảnh báo vào sự cố đang mở của cùng nguồn (trong cửa sổ thời gian),
+    hoặc mở sự cố mới. Mức của sự cố = mức cao nhất trong các cảnh báo của nó."""
+    inc = await con.fetchrow(
+        "SELECT id, severity FROM incidents WHERE src_ip=$1 AND status<>'resolved' "
+        "AND last_ts >= $2 ORDER BY id DESC LIMIT 1",
+        a["src_ip"], a["ts"] - INCIDENT_WINDOW)
+    if inc is None:
+        return await con.fetchval(
+            "INSERT INTO incidents (src_ip, first_ts, last_ts, severity, alert_count, rules) "
+            "VALUES ($1, $2, $2, $3, 1, jsonb_build_array($4::text)) RETURNING id",
+            a["src_ip"], a["ts"], a["severity"], a["rule"])
+    sev = min(inc["severity"], a["severity"], key=lambda s: SEV_RANK.get(s, 9))
+    await con.execute(
+        "UPDATE incidents SET first_ts=LEAST(first_ts, $2), last_ts=GREATEST(last_ts, $2), "
+        "severity=$3, alert_count=alert_count+1, rules = CASE "
+        "WHEN rules @> jsonb_build_array($4::text) THEN rules "
+        "ELSE rules || jsonb_build_array($4::text) END WHERE id=$1",
+        inc["id"], a["ts"], sev, a["rule"])
+    return inc["id"]
+
+
 async def store_alerts(con, alerts: list[dict]) -> None:
     for a in alerts:
+        a["incident_id"] = await attach_incident(con, a)
         a["id"] = await con.fetchval(
-            "INSERT INTO alerts (ts, severity, rule, src_ip, dst_ip, description, evidence) "
-            "VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
-            a["ts"], a["severity"], a["rule"], a["src_ip"], a["dst_ip"],
-            a["description"], json.dumps(a["evidence"]))
+            "INSERT INTO alerts (ts, detected_at, severity, rule, src_ip, dst_ip, "
+            "description, evidence, incident_id) "
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+            a["ts"], a.get("detected_at"), a["severity"], a["rule"], a["src_ip"],
+            a["dst_ip"], a["description"], json.dumps(a["evidence"]), a["incident_id"])
 
 
 async def quarantine(con, items: list[tuple]) -> None:
@@ -318,21 +355,64 @@ async def list_connections():
     return [dict(r) for r in rows]
 
 
+def _parse_json_fields(d: dict, *fields: str) -> dict:
+    """asyncpg trả JSONB dạng chuỗi -> parse để API trả object cho dashboard."""
+    for f in fields:
+        if isinstance(d.get(f), str):
+            try:
+                d[f] = json.loads(d[f])
+            except json.JSONDecodeError:
+                pass
+    return d
+
+
+ALERT_COLS = ("id, ts, detected_at, severity, rule, src_ip, dst_ip, description, "
+              "evidence, status, incident_id")
+
+
 @app.get("/api/alerts")
 async def list_alerts(limit: int = 100):
     rows = await app.state.pool.fetch(
-        "SELECT id, ts, severity, rule, src_ip, dst_ip, description, evidence, status "
-        "FROM alerts ORDER BY id DESC LIMIT $1", limit)
-    out = []
-    for r in rows:
-        d = dict(r)
-        if isinstance(d.get("evidence"), str):   # JSONB về dạng chuỗi -> parse cho dashboard
-            try:
-                d["evidence"] = json.loads(d["evidence"])
-            except json.JSONDecodeError:
-                pass
-        out.append(d)
-    return out
+        f"SELECT {ALERT_COLS} FROM alerts ORDER BY id DESC LIMIT $1", limit)
+    return [_parse_json_fields(dict(r), "evidence") for r in rows]
+
+
+@app.get("/api/incidents")
+async def list_incidents(limit: int = 100):
+    """Danh sách sự cố (mỗi sự cố gom các cảnh báo cùng nguồn)."""
+    rows = await app.state.pool.fetch(
+        "SELECT i.id, i.src_ip, i.first_ts, i.last_ts, i.severity, i.alert_count, "
+        "i.rules, i.status, (SELECT a.id FROM alerts a WHERE a.incident_id=i.id "
+        "ORDER BY CASE a.severity WHEN 'Critical' THEN 0 WHEN 'High' THEN 1 "
+        "WHEN 'Medium' THEN 2 ELSE 3 END, a.id LIMIT 1) AS top_alert_id "
+        "FROM incidents i ORDER BY i.id DESC LIMIT $1", limit)
+    return [_parse_json_fields(dict(r), "rules") for r in rows]
+
+
+@app.get("/api/incidents/{iid}")
+async def get_incident(iid: int):
+    """Chi tiết một sự cố kèm toàn bộ cảnh báo (và bằng chứng) thuộc nó."""
+    inc = await app.state.pool.fetchrow("SELECT * FROM incidents WHERE id=$1", iid)
+    if not inc:
+        raise HTTPException(status_code=404, detail="không có sự cố")
+    alerts = await app.state.pool.fetch(
+        f"SELECT {ALERT_COLS} FROM alerts WHERE incident_id=$1 ORDER BY id", iid)
+    return {**_parse_json_fields(dict(inc), "rules"),
+            "alerts": [_parse_json_fields(dict(a), "evidence") for a in alerts]}
+
+
+@app.post("/api/incidents/{iid}/status")
+async def set_incident_status(iid: int, status: str = Body(..., embed=True)):
+    """Đổi trạng thái sự cố; áp luôn trạng thái đó cho các cảnh báo của sự cố."""
+    if status not in ("open", "acknowledged", "resolved"):
+        raise HTTPException(status_code=400, detail="status không hợp lệ")
+    async with app.state.pool.acquire() as con:
+        async with con.transaction():
+            await con.execute("UPDATE incidents SET status=$1 WHERE id=$2", status, iid)
+            alert_status = "new" if status == "open" else status
+            await con.execute("UPDATE alerts SET status=$1 WHERE incident_id=$2",
+                              alert_status, iid)
+    return {"id": iid, "status": status}
 
 
 @app.post("/api/alerts/{alert_id}/status")
@@ -445,6 +525,9 @@ async def stats():
             "assets": await con.fetchval("SELECT count(*) FROM assets"),
             "connections": await con.fetchval("SELECT count(*) FROM connections"),
             "alerts": await con.fetchval("SELECT count(*) FROM alerts"),
+            "incidents": await con.fetchval("SELECT count(*) FROM incidents"),
+            "open_incidents": await con.fetchval(
+                "SELECT count(*) FROM incidents WHERE status<>'resolved'"),
             "quarantined": await con.fetchval("SELECT count(*) FROM quarantine"),
             "baseline_frozen": detector.frozen,
         }

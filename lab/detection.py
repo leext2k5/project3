@@ -71,8 +71,10 @@ class Detector:
         if now - self._last_alert.get(key, 0) < self.cooldown:
             return
         self._last_alert[key] = now
-        out.append({"ts": ev.get("ts"), "severity": severity, "rule": rule,
-                    "src_ip": src, "dst_ip": dst, "description": desc, "evidence": [ev]})
+        # ts = thời điểm capture gói gây cảnh báo; detected_at = thời điểm sinh cảnh báo.
+        out.append({"ts": ev.get("ts"), "detected_at": now, "severity": severity,
+                    "rule": rule, "src_ip": src, "dst_ip": dst,
+                    "description": desc, "evidence": [ev]})
 
     def check(self, events: list[dict]) -> list[dict]:
         """Áp các luật trên event Modbus."""
@@ -90,7 +92,8 @@ class Detector:
                     dq.popleft()
                 if len(dq) > self.rate_threshold:
                     self._emit(alerts, "dos", "High", src, dst,
-                               f"Tần suất bất thường ~{len(dq)} request/giây từ {src}", ev)
+                               f"Vượt ngưỡng tần suất: hơn {self.rate_threshold} request "
+                               f"trong 1 giây từ {src}", ev)
 
                 if src not in self.devices:           # thiết bị lạ
                     self._emit(alerts, "unknown_device", "High", src, dst,
