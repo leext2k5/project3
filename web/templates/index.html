@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Website thử nghiệm được bảo vệ bởi WAF</h2>
+  <p>Mọi request tới trang này đều đi qua <b>Nginx + ModSecurity v3 + OWASP CRS</b> trước khi tới Flask.</p>
+  <p class="note">Môi trường lab: một số chức năng cố ý chứa lỗ hổng để minh họa khả năng phát hiện/chặn của WAF.</p>
+</div>
+<div class="card">
+  <h3>Sản phẩm</h3>
+  <table>
+    <tr><th>#</th><th>Tên</th><th>Giá (VNĐ)</th><th></th></tr>
+    {% for p in products %}
+    <tr>
+      <td>{{ p.id }}</td>
+      <td>{{ p.name }}</td>
+      <td>{{ "{:,}".format(p.price) }}</td>
+      <td><a href="/product?id={{ p.id }}&ref=home">Xem</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

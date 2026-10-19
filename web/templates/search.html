@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Tìm kiếm — WAF Lab Shop{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Tìm kiếm sản phẩm</h2>
+  <form method="get" action="/search">
+    <label for="q">Từ khóa</label>
+    <input type="text" id="q" name="q" value="{{ q }}">
+    <label for="category">Danh mục</label>
+    <select id="category" name="category">
+      <option value="">— Tất cả —</option>
+      {% for c in ["laptop", "phu-kien", "man-hinh", "am-thanh", "mang"] %}
+      <option value="{{ c }}" {{ "selected" if c == category }}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Tìm</button>
+  </form>
+</div>
+{% if q or category %}
+<div class="card">
+  {# LỖ HỔNG CỐ Ý: |safe tắt escape -> Reflected XSS #}
+  <p id="search-echo">Kết quả cho: <b>{{ q|safe }}</b></p>
+  {% if error %}<p class="err">Lỗi truy vấn: {{ error }}</p>{% endif %}
+  <table>
+    <tr><th>#</th><th>Tên</th><th>Mô tả</th><th>Giá</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td></tr>
+    {% else %}
+    <tr><td colspan="4">Không tìm thấy sản phẩm.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="note">Số dòng trả về: <span id="row-count">{{ rows|length }}</span></p>
+</div>
+{% endif %}
+{% endblock %}

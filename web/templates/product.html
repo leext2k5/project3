@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Chi tiết sản phẩm — WAF Lab Shop{% endblock %}
+{% block content %}
+<div class="card">
+  {% if error %}
+    <p class="err">Lỗi truy vấn: {{ error }}</p>
+  {% elif item %}
+    <h2>{{ item.name }}</h2>
+    <p>{{ item.description }}</p>
+    {% if view != "compact" %}
+      <table>
+        <tr><th>Mã</th><td>{{ item.id }}</td></tr>
+        <tr><th>Danh mục</th><td>{{ item.category }}</td></tr>
+        <tr><th>Giá</th><td>{{ "{:,}".format(item.price) }} VNĐ</td></tr>
+      </table>
+    {% endif %}
+  {% else %}
+    <p>Không tìm thấy sản phẩm có id = {{ pid }}.</p>
+  {% endif %}
+  <p class="note">Tham số URL nhận được: id=<code>{{ pid }}</code>, view=<code>{{ view }}</code>{% if ref %}, ref=<code>{{ ref }}</code>{% endif %}</p>
+</div>
+{% endblock %}

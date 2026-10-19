@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Góp ý — WAF Lab Shop{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Gửi góp ý (form urlencoded)</h2>
+  <form method="post" action="/feedback">
+    <label for="name">Họ tên</label>
+    <input type="text" id="name" name="name">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email">
+    <label for="content">Nội dung</label>
+    <textarea id="content" name="content"></textarea>
+    <button type="submit">Gửi</button>
+  </form>
+</div>
+<div class="card">
+  <h2>Gửi góp ý kèm file (multipart/form-data)</h2>
+  <form method="post" action="/feedback" enctype="multipart/form-data">
+    <label for="name2">Họ tên</label>
+    <input type="text" id="name2" name="name">
+    <label for="content2">Nội dung</label>
+    <textarea id="content2" name="content"></textarea>
+    <label for="attachment">Tệp đính kèm</label>
+    <input type="file" id="attachment" name="attachment">
+    <button type="submit">Gửi</button>
+  </form>
+  <p class="note">API JSON: <code>POST /api/feedback</code> với body <code>{"name": "...", "content": "..."}</code></p>
+</div>
+{% if message %}<div class="card ok">{{ message }}</div>{% endif %}
+<div class="card">
+  <h3>Góp ý gần đây</h3>
+  <table>
+    <tr><th>Thời gian</th><th>Họ tên</th><th>Nội dung</th><th>Kiểu body</th><th>File</th></tr>
+    {% for f in items %}
+    <tr><td>{{ f.created_at }}</td><td>{{ f.name }}</td><td>{{ f.content }}</td><td><code>{{ f.content_type }}</code></td><td>{{ f.attachment or "" }}</td></tr>
+    {% else %}
+    <tr><td colspan="5">Chưa có góp ý.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}WAF Lab Shop{% endblock %}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #1f2933; background: #f5f7fa; }
+    header { background: #243b53; color: #fff; padding: 12px 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+    header a { color: #d9e2ec; text-decoration: none; }
+    header a:hover { color: #fff; }
+    header strong { font-size: 18px; margin-right: 16px; }
+    main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border: 1px solid #d9e2ec; border-radius: 6px; padding: 16px 20px; margin-bottom: 16px; }
+    label { display: block; margin: 10px 0 4px; font-weight: 600; }
+    input[type=text], input[type=password], input[type=email], textarea, select { width: 100%; max-width: 480px; padding: 8px; border: 1px solid #bcccdc; border-radius: 4px; box-sizing: border-box; font: inherit; }
+    textarea { min-height: 100px; }
+    button { margin-top: 12px; padding: 8px 18px; background: #334e68; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e4e7eb; }
+    .ok { color: #1b7a3a; } .err { color: #b42318; }
+    code, pre { background: #f0f4f8; padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+    pre { padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .note { font-size: 13px; color: #627d98; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>WAF Lab Shop</strong>
+    <a href="/">Trang chủ</a>
+    <a href="/search">Tìm kiếm</a>
+    <a href="/product?id=1">Chi tiết sản phẩm</a>
+    <a href="/login">Đăng nhập</a>
+    <a href="/feedback">Góp ý</a>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

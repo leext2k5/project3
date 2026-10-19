@@ -1,0 +1,15 @@
+# Log do WAF ghi ra lúc chạy
+logs/waf/*
+!logs/waf/.gitkeep
+
+# Báo cáo đề tài (không đưa lên git) và tàn dư npm
+report/
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store

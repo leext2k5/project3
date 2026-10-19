@@ -1,0 +1,77 @@
+# Giai đoạn 1 — WAF cơ bản: Nginx + ModSecurity v3 + OWASP CRS làm reverse proxy cho Flask
+#
+#   Client ──► 127.0.0.1:8080 ──► [waf] Nginx + ModSecurity + CRS ──► [web] Flask :5000
+#                                    (mạng frontend + backend)          (chỉ mạng backend)
+#
+# Chỉ cổng của WAF được công bố ra host. Container web nằm trong mạng "backend"
+# với internal: true nên không thể truy cập trực tiếp từ host (không bỏ qua được WAF).
+
+name: ai-waf-lab
+
+services:
+  web:
+    build: ./web
+    image: ai-waf-lab/web:phase1
+    container_name: waf-lab-web
+    expose:
+      - "5000"            # chỉ mở trong mạng Docker, KHÔNG có "ports:"
+    networks:
+      - backend
+    restart: unless-stopped
+
+  waf:
+    image: owasp/modsecurity-crs:4.30.0-nginx-alpine-202610180210
+    container_name: waf-lab-waf
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WAF_PORT:-8080}:8080"   # chỉ lắng nghe trên localhost của máy host
+    networks:
+      - frontend
+      - backend
+    environment:
+      # --- Reverse proxy ---
+      BACKEND: http://web:5000
+      SERVER_NAME: localhost
+      PROXY_TIMEOUT: 30s
+
+      # --- ModSecurity engine: DetectionOnly | On | Off ---
+      MODSEC_RULE_ENGINE: ${WAF_MODE:-DetectionOnly}
+
+      # --- OWASP CRS: paranoia level & ngưỡng anomaly score ---
+      BLOCKING_PARANOIA: ${PARANOIA:-1}
+      DETECTION_PARANOIA: ${DETECTION_PARANOIA:-1}
+      ANOMALY_INBOUND: ${ANOMALY_INBOUND:-5}
+      ANOMALY_OUTBOUND: ${ANOMALY_OUTBOUND:-4}
+      # Cho phép thêm PUT/PATCH/DELETE (mặc định CRS 4: GET HEAD POST OPTIONS)
+      ALLOWED_METHODS: "GET HEAD POST OPTIONS PUT PATCH DELETE"
+
+      # --- Log: ghi ra thư mục ./logs/waf trên host để phân tích (nền tảng cho giai đoạn AI) ---
+      MODSEC_AUDIT_ENGINE: RelevantOnly
+      MODSEC_AUDIT_LOG_FORMAT: JSON
+      MODSEC_AUDIT_LOG_TYPE: Serial
+      MODSEC_AUDIT_LOG_PARTS: ABIJDEFHZ
+      MODSEC_AUDIT_LOG: /var/log/waf/modsec_audit.json
+      ACCESSLOG: /var/log/waf/access.log
+      ERRORLOG: /var/log/waf/error.log
+      LOGLEVEL: warn
+    volumes:
+      # Luật tùy chỉnh: được nạp trước/sau bộ luật CRS (theo thứ tự tên file)
+      - ./waf/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro
+      - ./waf/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:/opt/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:ro
+      - ./logs/waf:/var/log/waf
+    healthcheck:
+      # Dùng "localhost" thay vì 127.0.0.1: Host header dạng IP kích hoạt luật CRS 920350 -> nhiễu log
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  frontend:
+    name: waf-lab-frontend
+  backend:
+    name: waf-lab-backend
+    internal: true          # không có route ra ngoài, không thể publish port
