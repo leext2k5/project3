@@ -10,9 +10,10 @@ Hệ thống dùng **Nginx + ModSecurity v3 + OWASP Core Rule Set (CRS)** làm r
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
-| 1 | WAF cơ bản: ModSecurity + CRS + Flask, ghi log, kiểm thử phát hiện/chặn | Đang thực hiện |
-| 2 | Chuẩn hóa log, tích hợp AI phân tích cảnh báo | Chưa bắt đầu |
-| 3 | Giao diện quản trị, thống kê | Chưa bắt đầu |
+| 1 | WAF cơ bản: ModSecurity + CRS + Flask, ghi log, kiểm thử phát hiện/chặn và false positive | Đang thực hiện |
+| 2 | Quản lý cảnh báo: thu thập và chuẩn hóa log, FastAPI + SQLite, dashboard | Chưa bắt đầu |
+| 3 | Tích hợp AI: phân loại, giải thích, đánh giá false positive, đề xuất xử lý | Chưa bắt đầu |
+| 4 | Đánh giá (Precision/Recall/F1) và hoàn thiện | Chưa bắt đầu |
 
 ## Kiến trúc
 
@@ -85,6 +86,14 @@ python3 scripts/parse_audit.py --summary          # thống kê theo loại tấ
 python3 scripts/parse_audit.py --json             # xuất JSON Lines (đầu vào cho AI)
 ```
 
+Kiểm tra false positive (WAF có chặn nhầm người dùng hợp lệ không), nên chạy ở chế độ `block`:
+
+```bash
+python3 scripts/benign_check.py   # gửi các thao tác bình thường trên 5 chức năng, đối chiếu mã HTTP và audit log
+```
+
+Script trả mã thoát `0` khi mọi request đi qua và không làm khớp luật nào, `1` nếu có request bị chặn hoặc có luật báo nhầm.
+
 ## Website thử nghiệm
 
 | Chức năng | Đường dẫn | Mục đích kiểm thử |
@@ -113,9 +122,10 @@ Sau khi sửa luật: `docker compose restart waf`.
 ├── waf/rules/                # luật ModSecurity tùy chỉnh
 ├── scripts/
 │   ├── parse_audit.py        # phân tích audit log
+│   ├── benign_check.py       # kiểm tra false positive
 │   └── waf-mode.sh           # đổi chế độ WAF
 ├── logs/waf/                 # log do WAF ghi ra (không đưa lên git)
-└── evidence/                 # bản sao log làm minh chứng
+└── evidence/                 # bản sao log và kết quả kiểm thử làm minh chứng
 ```
 
 ## Tài liệu tham khảo

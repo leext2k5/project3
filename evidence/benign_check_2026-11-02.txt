@@ -1,0 +1,33 @@
+# Kiểm tra false positive — 02/11/2026 21:56 — Chế độ WAF: On | Paranoia Level: 1 | Ngưỡng inbound: 5
+Gửi 23 request hợp lệ tới http://localhost:8080
+
+  [OK  ] 200  GET  Trang chủ
+  [OK  ] 200  GET  Mở form đăng nhập
+  [OK  ] 200  POST Đăng nhập đúng tài khoản
+  [OK  ] 200  POST Đăng nhập sai mật khẩu
+  [OK  ] 200  GET  Tìm kiếm một từ
+  [OK  ] 200  GET  Tìm kiếm nhiều từ + lọc danh mục
+  [OK  ] 200  GET  Tìm kiếm tiếng Việt có dấu
+  [OK  ] 200  GET  Chọn danh mục, không nhập từ khóa
+  [OK  ] 200  GET  Xem sản phẩm id=1
+  [OK  ] 200  GET  Xem sản phẩm id=2
+  [OK  ] 200  GET  Xem sản phẩm id=3
+  [OK  ] 200  GET  Xem sản phẩm id=4
+  [OK  ] 200  GET  Xem sản phẩm id=5
+  [OK  ] 200  GET  Xem sản phẩm id=6
+  [OK  ] 200  GET  Sản phẩm với view và ref
+  [OK  ] 200  GET  Sản phẩm không tồn tại (id hợp lệ)
+  [OK  ] 200  GET  Mở form góp ý
+  [OK  ] 302  POST Gửi góp ý (form thường)
+  [OK  ] 302  POST Góp ý có tên chứa dấu nháy đơn
+  [OK  ] 302  POST Góp ý có đường link và email có dấu +
+  [OK  ] 302  POST Gửi góp ý kèm tệp (multipart)
+  [OK  ] 201  POST API: gửi góp ý JSON
+  [OK  ] 200  GET  API: danh sách sản phẩm
+
+=== KẾT QUẢ ===
+Request đi qua đúng như mong đợi : 23/23
+Bị chặn nhầm (403)               : 0
+Bản ghi audit log có luật khớp   : 0
+Luật báo nhầm                    : không có
+exit code: 0
