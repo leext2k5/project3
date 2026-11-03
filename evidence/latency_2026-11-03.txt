@@ -1,0 +1,15 @@
+# Đo độ trễ do WAF thêm vào — 03/11/2026
+# Chế độ On, PL1, ngưỡng 5. Client: curl chạy bên trong container waf-lab-waf, gửi tuần tự (1 kết nối, không tải đồng thời).
+# Mỗi cấu hình: 20 request làm nóng (bỏ qua) + 200 request đo; time_total của curl.
+#   "Trực tiếp Flask" = http://web:5000<path>      (đi thẳng tới Gunicorn qua mạng backend, bỏ qua WAF)
+#   "Qua WAF"         = http://localhost:8080<path> (Nginx + ModSecurity + CRS, rồi proxy tới web:5000)
+# Mọi request đều trả 200; không request nào làm khớp luật (audit log không có bản ghi User-Agent latency-bench).
+
+Endpoint           Cấu hình          n    Trung vị   p95
+/product?id=3      Trực tiếp Flask   200  0.58 ms    0.68 ms
+/product?id=3      Qua WAF           200  1.63 ms    1.77 ms
+/search?q=laptop   Trực tiếp Flask   200  0.59 ms    1.08 ms
+/search?q=laptop   Qua WAF           200  1.68 ms    1.88 ms
+
+Chênh lệch trung vị: +1.05 ms (/product), +1.09 ms (/search).
+Chênh lệch gồm cả xử lý của Nginx, ModSecurity/CRS và một chặng mạng waf -> web, nên là cận trên của chi phí do riêng ModSecurity.

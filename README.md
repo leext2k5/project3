@@ -94,6 +94,15 @@ python3 scripts/benign_check.py   # gửi các thao tác bình thường trên 5
 
 Script trả mã thoát `0` khi mọi request đi qua và không làm khớp luật nào, `1` nếu có request bị chặn hoặc có luật báo nhầm.
 
+Đối chiếu audit log với log Flask (request bị chặn phải **không** tới được ứng dụng):
+
+```bash
+python3 scripts/verify_blocking.py --since 30m             # chỉ xét 30 phút gần nhất
+python3 scripts/verify_blocking.py --since 30m --markdown  # in bảng Markdown để đưa vào báo cáo
+```
+
+Request bị chặn phải vắng mặt trong log Flask. Request không bị chặn phải có mặt, đây là nhóm đối chứng để chắc phép đối chiếu tìm đúng chỗ.
+
 ## Website thử nghiệm
 
 | Chức năng | Đường dẫn | Mục đích kiểm thử |
@@ -123,6 +132,7 @@ Sau khi sửa luật: `docker compose restart waf`.
 ├── scripts/
 │   ├── parse_audit.py        # phân tích audit log
 │   ├── benign_check.py       # kiểm tra false positive
+│   ├── verify_blocking.py    # đối chiếu log WAF với log Flask
 │   └── waf-mode.sh           # đổi chế độ WAF
 ├── logs/waf/                 # log do WAF ghi ra (không đưa lên git)
 └── evidence/                 # bản sao log và kết quả kiểm thử làm minh chứng

@@ -1,0 +1,28 @@
+# Kiểm thử #10 — đối chiếu audit log WAF và log Flask — 03/11/2026 16:36
+
+[2026-10-19 02:56:27] 200 cho qua (DetectionOnly) Flask: CÓ     Đạt       GET /search?q=' UNION SELECT username,password,role,id FROM u...
+    loại: SQL Injection | luật: 942100, 942190, 942270, 942360 | điểm: 20
+[2026-10-19 03:10:48] 200 cho qua (DetectionOnly) Flask: CÓ     Đạt       GET /product?id=abc
+    loại: SQL Injection | luật: 1000100 | điểm: 5
+[2026-10-19 03:28:55] 403 CHẶN                   Flask: KHÔNG  Đạt       GET /product?id=abc
+    loại: SQL Injection | luật: 1000100 | điểm: 5
+[2026-10-19 03:29:08] 200 cho qua (DetectionOnly) Flask: CÓ     Đạt       GET /product?id=abc
+    loại: SQL Injection | luật: 1000100 | điểm: 5
+[2026-10-19 06:39:28] 200 cho qua (DetectionOnly) Flask: CÓ     Đạt       GET /product?id=abc
+    loại: SQL Injection | luật: 1000100 | điểm: 5
+[2026-10-26 09:27:56] 403 CHẶN                   Flask: KHÔNG  Đạt       GET /product?id=abc
+    loại: SQL Injection | luật: 1000100 | điểm: 5
+
+=== KẾT QUẢ ĐỐI CHIẾU ===
+Sự kiện có luật khớp            : 6
+Bị WAF chặn                     : 2
+Bị chặn nhưng vẫn tới Flask     : 0
+Nhất quán giữa WAF và Flask     : 6/6
+Theo loại tấn công (bị chặn/tổng):
+  2/6  SQL Injection
+exit code: 0
+
+## Bằng chứng thô: các dòng access log Gunicorn có /product?id=abc
+2026-10-19T03:10:48.162428386Z 172.21.0.1 - - [19/Oct/2026:03:10:48 +0000] "GET /product?id=abc HTTP/1.1" 200 2198 "-" "curl/8.7.1"
+2026-10-19T03:29:08.301787131Z 172.21.0.1 - - [19/Oct/2026:03:29:08 +0000] "GET /product?id=abc HTTP/1.1" 200 2198 "-" "curl/8.7.1"
+2026-10-19T06:39:28.072559472Z 172.21.0.1 - - [19/Oct/2026:06:39:28 +0000] "GET /product?id=abc HTTP/1.1" 200 2198 "-" "curl/8.7.1"
